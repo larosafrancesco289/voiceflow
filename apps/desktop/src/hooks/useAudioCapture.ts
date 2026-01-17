@@ -45,6 +45,9 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
 
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.85;
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -25;
       analyserRef.current = analyser;
       setAnalyser(analyser);
 
