@@ -55,6 +55,10 @@ class Transcriber:
         self._loading = False
         self._loaded = asyncio.Event()
 
+    async def wait_until_ready(self) -> None:
+        """Wait until the model is fully loaded and ready for transcription."""
+        await self._loaded.wait()
+
     async def load_model(self):
         """Load the parakeet model asynchronously."""
         if self.model is not None:
@@ -222,7 +226,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # Send ready signal once model is loaded
         if transcriber:
-            await transcriber._loaded.wait()
+            await transcriber.wait_until_ready()
         await websocket.send_json({"type": "ready"})
 
         while True:
@@ -276,8 +280,8 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}")
         try:
             await websocket.send_json({"type": "error", "error": str(e)})
-        except Exception:
-            pass
+        except Exception as send_error:
+            logger.debug(f"Failed to send error to client: {send_error}")
 
 
 def main():

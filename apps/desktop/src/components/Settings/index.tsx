@@ -1,19 +1,15 @@
 import { motion } from 'framer-motion';
 import { useAppStore } from '../../stores/appStore';
 
-// Refined toggle switch
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!enabled)}
       className="relative w-10 h-6 rounded-full transition-all duration-200"
-      style={{
-        background: enabled ? '#22c55e' : 'rgba(255, 255, 255, 0.1)',
-      }}
+      style={{ background: enabled ? '#22c55e' : 'rgba(255, 255, 255, 0.1)' }}
     >
       <motion.div
-        className="absolute top-1 left-1 w-4 h-4 rounded-full"
-        style={{ background: '#fff' }}
+        className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white"
         animate={{ x: enabled ? 16 : 0 }}
         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
       />
@@ -21,27 +17,19 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
   );
 }
 
-// Keyboard shortcut badge
 function ShortcutBadge() {
   return (
     <div className="flex items-center gap-1">
-      <span
-        className="px-2 py-1 rounded text-xs font-medium"
-        style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'rgba(255, 255, 255, 0.9)' }}
-      >
+      <span className="px-2 py-1 rounded text-xs font-medium bg-white/10 text-white/90">
         ⌥
       </span>
-      <span
-        className="px-2 py-1 rounded text-xs font-medium"
-        style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'rgba(255, 255, 255, 0.9)' }}
-      >
+      <span className="px-2 py-1 rounded text-xs font-medium bg-white/10 text-white/90">
         Space
       </span>
     </div>
   );
 }
 
-// Setting row component
 function SettingRow({
   label,
   description,
@@ -58,17 +46,12 @@ function SettingRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className="flex items-center justify-between py-4"
-      style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}
+      className="flex items-center justify-between py-4 border-b border-white/5"
     >
       <div>
-        <p className="text-sm font-medium" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
-          {label}
-        </p>
+        <p className="text-sm font-medium text-white/90">{label}</p>
         {description && (
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255, 255, 255, 0.4)' }}>
-            {description}
-          </p>
+          <p className="text-xs mt-0.5 text-white/40">{description}</p>
         )}
       </div>
       {children}
@@ -80,13 +63,7 @@ export function Settings() {
   const { autoPasteEnabled, setAutoPasteEnabled, history, clearHistory } = useAppStore();
 
   return (
-    <div
-      className="min-h-screen p-6"
-      style={{
-        background: '#0a0a0a',
-        fontFamily: '-apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-      }}
-    >
+    <div className="min-h-screen p-6 bg-[#0a0a0a] font-sans">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -94,10 +71,7 @@ export function Settings() {
         transition={{ duration: 0.4 }}
         className="mb-8"
       >
-        <h1
-          className="text-xl font-semibold tracking-tight"
-          style={{ color: '#fff', letterSpacing: '-0.02em' }}
-        >
+        <h1 className="text-xl font-semibold tracking-tight text-white">
           Settings
         </h1>
       </motion.div>
@@ -129,14 +103,13 @@ export function Settings() {
         className="mt-8"
       >
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
+          <p className="text-xs font-medium uppercase tracking-wider text-white/30">
             Recent ({history.length})
           </p>
           {history.length > 0 && (
             <button
               onClick={clearHistory}
-              className="text-xs transition-colors hover:opacity-80"
-              style={{ color: 'rgba(255, 255, 255, 0.4)' }}
+              className="text-xs transition-colors hover:opacity-80 text-white/40"
             >
               Clear
             </button>
@@ -144,9 +117,7 @@ export function Settings() {
         </div>
 
         {history.length === 0 ? (
-          <p className="text-sm py-4" style={{ color: 'rgba(255, 255, 255, 0.25)' }}>
-            No transcriptions yet
-          </p>
+          <p className="text-sm py-4 text-white/25">No transcriptions yet</p>
         ) : (
           <div className="space-y-2 max-h-40 overflow-y-auto">
             {history.slice(0, 5).map((item, index) => (
@@ -155,17 +126,14 @@ export function Settings() {
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.2, delay: 0.25 + index * 0.05 }}
-                className="p-3 rounded-lg"
-                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                className="p-3 rounded-lg bg-white/5"
               >
-                <p
-                  className="text-sm truncate"
-                  style={{ color: 'rgba(255, 255, 255, 0.8)' }}
-                >
-                  {item.text}
-                </p>
-                <p className="text-[10px] mt-1" style={{ color: 'rgba(255, 255, 255, 0.25)' }}>
-                  {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <p className="text-sm truncate text-white/80">{item.text}</p>
+                <p className="text-[10px] mt-1 text-white/25">
+                  {new Date(item.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </p>
               </motion.div>
             ))}
@@ -180,9 +148,7 @@ export function Settings() {
         transition={{ duration: 0.4, delay: 0.4 }}
         className="absolute bottom-6 left-6 right-6 text-center"
       >
-        <p className="text-[11px]" style={{ color: 'rgba(255, 255, 255, 0.2)' }}>
-          VoiceFlow v0.1.0
-        </p>
+        <p className="text-[11px] text-white/20">VoiceFlow v0.1.0</p>
       </motion.div>
     </div>
   );

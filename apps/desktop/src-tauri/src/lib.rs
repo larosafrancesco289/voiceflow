@@ -105,16 +105,18 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "settings" => {
                 if let Some(window) = app.get_webview_window("settings") {
                     let _ = window.show();
-                } else {
-                    let _ = WebviewWindowBuilder::new(
-                        app,
-                        "settings",
-                        WebviewUrl::App("/settings".into()),
-                    )
-                    .title("VoiceFlow Settings")
-                    .inner_size(400.0, 500.0)
-                    .resizable(false)
-                    .build();
+                    let _ = window.set_focus();
+                } else if let Ok(window) = WebviewWindowBuilder::new(
+                    app,
+                    "settings",
+                    WebviewUrl::App("/settings".into()),
+                )
+                .title("VoiceFlow Settings")
+                .inner_size(400.0, 500.0)
+                .resizable(false)
+                .build()
+                {
+                    let _ = window.show();
                 }
             }
             _ => {}

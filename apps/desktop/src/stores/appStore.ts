@@ -4,19 +4,15 @@ import { persist } from 'zustand/middleware';
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'complete';
 
 interface AppState {
-  isDarkMode: boolean;
   recordingState: RecordingState;
   currentTranscription: string;
   partialTranscription: string;
-  audioLevel: number;
   autoPasteEnabled: boolean;
   history: Array<{ text: string; timestamp: number }>;
 
-  setDarkMode: (isDark: boolean) => void;
   setRecordingState: (state: RecordingState) => void;
   setCurrentTranscription: (text: string) => void;
   setPartialTranscription: (text: string) => void;
-  setAudioLevel: (level: number) => void;
   setAutoPasteEnabled: (enabled: boolean) => void;
   addToHistory: (text: string) => void;
   clearHistory: () => void;
@@ -26,19 +22,15 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      isDarkMode: false,
       recordingState: 'idle',
       currentTranscription: '',
       partialTranscription: '',
-      audioLevel: 0,
       autoPasteEnabled: true,
       history: [],
 
-      setDarkMode: (isDark) => set({ isDarkMode: isDark }),
       setRecordingState: (state) => set({ recordingState: state }),
       setCurrentTranscription: (text) => set({ currentTranscription: text }),
       setPartialTranscription: (text) => set({ partialTranscription: text }),
-      setAudioLevel: (level) => set({ audioLevel: level }),
       setAutoPasteEnabled: (enabled) => set({ autoPasteEnabled: enabled }),
       addToHistory: (text) =>
         set((state) => ({
@@ -53,7 +45,6 @@ export const useAppStore = create<AppState>()(
           recordingState: 'idle',
           currentTranscription: '',
           partialTranscription: '',
-          audioLevel: 0,
         }),
     }),
     {
