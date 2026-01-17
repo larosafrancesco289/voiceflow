@@ -84,7 +84,7 @@ async fn show_bubble(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         position_bubble(&app);
         let _ = window.show();
-        let _ = window.set_focus();
+        // Don't focus - keep focus on the previous app
     }
 }
 
@@ -100,16 +100,32 @@ async fn paste_from_clipboard() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        // Use AppleScript to simulate Cmd+V paste
+        use std::thread;
+        use std::time::Duration;
+
+        // Minimal delay before paste
+        thread::sleep(Duration::from_millis(10));
+
+        // Use AppleScript to activate frontmost app and paste
+        let script = r#"
+            tell application "System Events"
+                set frontApp to name of first application process whose frontmost is true
+                keystroke "v" using command down
+            end tell
+        "#;
+
         let result = Command::new("osascript")
             .arg("-e")
-            .arg("tell application \"System Events\" to keystroke \"v\" using command down")
+            .arg(script)
             .output()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("Failed to run osascript: {}", e))?;
 
         if !result.status.success() {
-            return Err(String::from_utf8_lossy(&result.stderr).to_string());
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            println!("[voiceflow] Paste failed: {}", stderr);
+            return Err(stderr.to_string());
         }
+        println!("[voiceflow] Paste successful");
     }
     Ok(())
 }
@@ -127,7 +143,7 @@ async fn start_recording(app: AppHandle) {
         if let Some(window) = app.get_webview_window("main") {
             position_bubble(&app);
             let _ = window.show();
-            let _ = window.set_focus();
+            // Don't focus - keep focus on the previous app
         }
     }
 }
@@ -164,14 +180,14 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(window) = app.get_webview_window("main") {
                     position_bubble(app);
                     let _ = window.show();
-                    let _ = window.set_focus();
+                    // Don't focus - keep focus on the previous app
                 }
             }
             "settings" => {
                 println!("[voiceflow] Settings clicked");
                 if let Some(window) = app.get_webview_window("settings") {
                     let _ = window.show();
-                    let _ = window.set_focus();
+                    // Don't focus - keep focus on the previous app
                 } else {
                     let _ = WebviewWindowBuilder::new(
                         app,
@@ -230,7 +246,7 @@ pub fn run() {
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     position_bubble(&app_handle);
                                     let _ = window.show();
-                                    let _ = window.set_focus();
+                                    // Don't focus - keep focus on the previous app
                                 }
                             }
                         }

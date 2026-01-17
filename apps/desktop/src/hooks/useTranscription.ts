@@ -75,12 +75,12 @@ export function useTranscription() {
           // Copy to clipboard
           await writeText(text);
           await invoke('add_to_history', { text });
-          // Hide bubble first so paste goes to the correct app
+          // Hide bubble and paste immediately (window doesn't steal focus)
           await invoke('hide_bubble');
-          // Small delay to let the previous app regain focus
-          await new Promise((resolve) => setTimeout(resolve, 100));
           // Simulate Cmd+V to paste
+          console.log('[Transcription] Pasting text...');
           await invoke('paste_from_clipboard');
+          console.log('[Transcription] Paste complete');
           // Reset state after pasting
           reset();
           return;
