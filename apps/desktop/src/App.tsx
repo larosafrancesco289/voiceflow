@@ -52,11 +52,20 @@ const BAR_COUNT = 15;
 const MAX_HEIGHT = 20; // Must fit inside 28px pill
 const MIN_HEIGHT = 3;
 const MIN_SCALE = MIN_HEIGHT / MAX_HEIGHT;
-const NOISE_FLOOR = 0.03; // Gate tiny jitters
-const AUDIO_SMOOTH_MS = 90;
-const ATTACK_MS = 70;
-const RELEASE_MS = 160;
-const IDLE_SMOOTH_MS = 220;
+const NOISE_FLOOR = 0.02; // Lower gate for more sensitivity
+const AUDIO_SMOOTH_MS = 50; // Faster smoothing for responsiveness
+const ATTACK_MS = 40; // Faster attack for snappier response
+const RELEASE_MS = 120; // Smoother release
+const IDLE_SMOOTH_MS = 180;
+
+// Center-out mapping: index 7 is center, bars mirror outward
+// Maps display position -> frequency bin index for symmetric visualization
+const CENTER = Math.floor(BAR_COUNT / 2);
+const centerOutOrder = Array.from({ length: BAR_COUNT }, (_, displayIdx) => {
+  const distFromCenter = Math.abs(displayIdx - CENTER);
+  // Center gets highest energy frequencies, edges get lower
+  return CENTER - distFromCenter;
+});
 
 function Waveform({ analyser }: { analyser: AnalyserNode | null }) {
   const recordingState = useAppStore((state) => state.recordingState);
@@ -125,15 +134,19 @@ function Waveform({ analyser }: { analyser: AnalyserNode | null }) {
           smoothedLevels.current[i] += (shaped - smoothedLevels.current[i]) * audioSmooth;
         }
 
-        // Calculate target scales
+        // Calculate target scales with center-out display mapping
         for (let i = 0; i < BAR_COUNT; i++) {
           const level = smoothedLevels.current[i];
           const response = level > displayLevels.current[i] ? attack : release;
           displayLevels.current[i] += (level - displayLevels.current[i]) * response;
+        }
 
-          const bar = barsRef.current[i];
+        // Apply to bars using center-out mapping (center gets highest energy)
+        for (let displayIdx = 0; displayIdx < BAR_COUNT; displayIdx++) {
+          const freqIdx = centerOutOrder[displayIdx];
+          const bar = barsRef.current[displayIdx];
           if (bar) {
-            const scale = MIN_SCALE + displayLevels.current[i] * (1 - MIN_SCALE);
+            const scale = MIN_SCALE + displayLevels.current[freqIdx] * (1 - MIN_SCALE);
             bar.style.transform = `scaleY(${scale}) translateZ(0)`;
           }
         }
@@ -148,19 +161,23 @@ function Waveform({ analyser }: { analyser: AnalyserNode | null }) {
           }
         }
       } else {
-        // Idle breathing animation
-        for (let i = 0; i < BAR_COUNT; i++) {
-          const phase = (elapsed / 3000) * Math.PI * 2; // 3 second cycle
-          const offset = i * 0.2;
-          const wave = Math.sin(phase + offset) * 0.5 + 0.5;
+        // Idle breathing animation - symmetric from center
+        const phase = (elapsed / 2500) * Math.PI * 2; // 2.5 second cycle
 
-          // Gentle breathing between MIN_SCALE and 40% of max
-          const targetLevel = wave * 0.4;
-          displayLevels.current[i] += (targetLevel - displayLevels.current[i]) * idleSmooth;
+        for (let displayIdx = 0; displayIdx < BAR_COUNT; displayIdx++) {
+          // Distance from center determines wave offset (creates ripple from center)
+          const distFromCenter = Math.abs(displayIdx - CENTER);
+          const offset = distFromCenter * 0.3;
+          const wave = Math.sin(phase - offset) * 0.5 + 0.5;
 
-          const bar = barsRef.current[i];
+          // Center bars breathe more, edges breathe less
+          const centerFactor = 1 - (distFromCenter / CENTER) * 0.5;
+          const targetLevel = wave * 0.4 * centerFactor;
+          displayLevels.current[displayIdx] += (targetLevel - displayLevels.current[displayIdx]) * idleSmooth;
+
+          const bar = barsRef.current[displayIdx];
           if (bar) {
-            const scale = MIN_SCALE + displayLevels.current[i] * (1 - MIN_SCALE);
+            const scale = MIN_SCALE + displayLevels.current[displayIdx] * (1 - MIN_SCALE);
             bar.style.transform = `scaleY(${scale}) translateZ(0)`;
           }
         }
@@ -244,7 +261,7 @@ function App() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '15vh' }}>
       <VoicePill analyser={analyser} />
     </div>
   );

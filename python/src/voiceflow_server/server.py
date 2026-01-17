@@ -234,19 +234,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
 
             if "bytes" in message:
-                # Binary audio data
+                # Binary audio data - just accumulate, no partial transcription
+                # Partial transcriptions were causing O(n²) work and slowdowns
                 if is_recording:
                     audio_buffer.add_chunk(message["bytes"])
-                    if audio_buffer.total_samples % 16000 == 0:  # Log every second
-                        logger.info(f"Received audio: {audio_buffer.duration:.1f}s")
-
-                    # Send partial updates periodically
-                    if audio_buffer.duration >= 1.0 and transcriber:
-                        audio = audio_buffer.get_audio()
-                        if len(audio) > 0:
-                            text = await transcriber.transcribe(audio)
-                            if text:
-                                await websocket.send_json({"type": "partial", "text": text})
 
             elif "text" in message:
                 # JSON control message
