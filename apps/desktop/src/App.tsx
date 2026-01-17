@@ -1,97 +1,203 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore } from './stores/appStore';
 import { useTranscription } from './hooks/useTranscription';
 import { Settings } from './components/Settings';
 
-// Waveform with pure DOM animation
+// Processing spinner - thin rotating arc that matches the minimal aesthetic
+function ProcessingSpinner() {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 20,
+      height: 20,
+    }}>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 18 18"
+        style={{
+          animation: 'spin 1s linear infinite',
+        }}
+      >
+        <circle
+          cx="9"
+          cy="9"
+          r="7"
+          fill="none"
+          stroke="rgba(255,255,255,0.15)"
+          strokeWidth="2"
+        />
+        <path
+          d="M 9 2 A 7 7 0 0 1 16 9"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// Smooth waveform with audio-aware smoothing + GPU-friendly transforms
+const BAR_COUNT = 15;
+const MAX_HEIGHT = 20; // Must fit inside 28px pill
+const MIN_HEIGHT = 3;
+const MIN_SCALE = MIN_HEIGHT / MAX_HEIGHT;
+const NOISE_FLOOR = 0.03; // Gate tiny jitters
+const AUDIO_SMOOTH_MS = 90;
+const ATTACK_MS = 70;
+const RELEASE_MS = 160;
+const IDLE_SMOOTH_MS = 220;
+
 function Waveform({ analyser }: { analyser: AnalyserNode | null }) {
-  const { recordingState, setAudioLevel } = useAppStore();
+  const recordingState = useAppStore((state) => state.recordingState);
+  const setAudioLevel = useAppStore((state) => state.setAudioLevel);
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
   const animationRef = useRef<number | null>(null);
-  const breathingRef = useRef<number | null>(null);
 
-  const baseHeights = useMemo(() => [8, 12, 16, 12, 8], []);
+  // Double smoothing: smooth the audio levels, then smooth the visual heights
+  const smoothedLevels = useRef<number[]>(new Array(BAR_COUNT).fill(0));
+  const displayLevels = useRef<number[]>(new Array(BAR_COUNT).fill(0));
+  const audioLevelRef = useRef(0);
+  const frameCount = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
+
   const isRecording = recordingState === 'recording';
 
-  // Breathing animation (idle)
   useEffect(() => {
-    if (isRecording) {
-      if (breathingRef.current) cancelAnimationFrame(breathingRef.current);
-      return;
-    }
-
     let startTime: number | null = null;
+    lastTimeRef.current = null;
+    const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+    const segmentRanges = analyser
+      ? Array.from({ length: BAR_COUNT }, (_, i) => {
+          const binCount = analyser.frequencyBinCount;
+          const voiceStart = Math.floor(binCount * 0.01);
+          const voiceEnd = Math.floor(binCount * 0.25);
+          const voiceRange = voiceEnd - voiceStart;
+          const segmentStart = voiceStart + Math.floor((i / BAR_COUNT) * voiceRange);
+          const segmentEnd = voiceStart + Math.floor(((i + 1) / BAR_COUNT) * voiceRange);
+          return [segmentStart, segmentEnd];
+        })
+      : null;
 
-    const breathe = (timestamp: number) => {
+    const animate = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
       const elapsed = timestamp - startTime;
+      const lastTime = lastTimeRef.current ?? timestamp;
+      const dt = Math.min(64, Math.max(0, timestamp - lastTime));
+      lastTimeRef.current = timestamp;
+      const smoothingForMs = (ms: number) => 1 - Math.exp(-dt / ms);
+      const audioSmooth = smoothingForMs(AUDIO_SMOOTH_MS);
+      const attack = smoothingForMs(ATTACK_MS);
+      const release = smoothingForMs(RELEASE_MS);
+      const idleSmooth = smoothingForMs(IDLE_SMOOTH_MS);
 
-      barsRef.current.forEach((bar, i) => {
-        if (!bar) return;
-        const delay = i * 100;
-        const t = ((elapsed + delay) % 1000) / 1000;
-        const ease = 0.5 - 0.5 * Math.cos(t * Math.PI * 2);
-        const h = baseHeights[i] * (0.3 + ease * 0.55);
-        bar.style.height = `${h}px`;
-      });
+      if (isRecording && analyser && dataArray && segmentRanges) {
+        // Audio-reactive mode
+        analyser.getByteFrequencyData(dataArray);
 
-      breathingRef.current = requestAnimationFrame(breathe);
-    };
+        let totalLevel = 0;
 
-    breathingRef.current = requestAnimationFrame(breathe);
-    return () => {
-      if (breathingRef.current) cancelAnimationFrame(breathingRef.current);
-    };
-  }, [isRecording, baseHeights]);
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const [segmentStart, segmentEnd] = segmentRanges[i];
+          let sum = 0;
+          for (let j = segmentStart; j < segmentEnd; j++) {
+            sum += dataArray[j];
+          }
 
-  // Audio-reactive (recording)
-  useEffect(() => {
-    if (!analyser || !isRecording) {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      return;
-    }
+          const avg = sum / Math.max(1, segmentEnd - segmentStart);
+          const rawLevel = avg / 255;
+          totalLevel += rawLevel;
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    const step = Math.floor(analyser.frequencyBinCount / 5);
+          const gated = Math.max(0, rawLevel - NOISE_FLOOR) / (1 - NOISE_FLOOR);
+          const shaped = Math.pow(gated, 0.7);
 
-    const update = () => {
-      analyser.getByteFrequencyData(dataArray);
-
-      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length / 255;
-      setAudioLevel(avg);
-
-      barsRef.current.forEach((bar, i) => {
-        if (!bar) return;
-        let sum = 0;
-        for (let j = 0; j < step; j++) {
-          sum += dataArray[i * step + j];
+          // First smoothing layer: smooth the raw audio levels (removes trembling)
+          smoothedLevels.current[i] += (shaped - smoothedLevels.current[i]) * audioSmooth;
         }
-        const level = sum / step / 255;
-        const h = baseHeights[i] * (0.2 + level * 0.8);
-        bar.style.height = `${h}px`;
-      });
 
-      animationRef.current = requestAnimationFrame(update);
+        // Calculate target scales
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const level = smoothedLevels.current[i];
+          const response = level > displayLevels.current[i] ? attack : release;
+          displayLevels.current[i] += (level - displayLevels.current[i]) * response;
+
+          const bar = barsRef.current[i];
+          if (bar) {
+            const scale = MIN_SCALE + displayLevels.current[i] * (1 - MIN_SCALE);
+            bar.style.transform = `scaleY(${scale}) translateZ(0)`;
+          }
+        }
+
+        // Update audio level store (throttled)
+        frameCount.current++;
+        if (frameCount.current % 4 === 0) {
+          const avgLevel = totalLevel / BAR_COUNT;
+          if (Math.abs(avgLevel - audioLevelRef.current) > 0.03) {
+            audioLevelRef.current = avgLevel;
+            setAudioLevel(avgLevel);
+          }
+        }
+      } else {
+        // Idle breathing animation
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const phase = (elapsed / 3000) * Math.PI * 2; // 3 second cycle
+          const offset = i * 0.2;
+          const wave = Math.sin(phase + offset) * 0.5 + 0.5;
+
+          // Gentle breathing between MIN_SCALE and 40% of max
+          const targetLevel = wave * 0.4;
+          displayLevels.current[i] += (targetLevel - displayLevels.current[i]) * idleSmooth;
+
+          const bar = barsRef.current[i];
+          if (bar) {
+            const scale = MIN_SCALE + displayLevels.current[i] * (1 - MIN_SCALE);
+            bar.style.transform = `scaleY(${scale}) translateZ(0)`;
+          }
+        }
+      }
+
+      animationRef.current = requestAnimationFrame(animate);
     };
 
-    animationRef.current = requestAnimationFrame(update);
+    animationRef.current = requestAnimationFrame(animate);
+
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
     };
-  }, [analyser, isRecording, setAudioLevel, baseHeights]);
+  }, [analyser, isRecording, setAudioLevel]);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, height: '100%' }}>
-      {baseHeights.map((h, i) => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
+      height: MAX_HEIGHT
+    }}>
+      {Array.from({ length: BAR_COUNT }, (_, i) => (
         <div
           key={i}
           ref={el => { barsRef.current[i] = el; }}
           style={{
-            width: 3,
-            height: h * 0.4,
-            borderRadius: 1.5,
+            width: 2,
+            height: MAX_HEIGHT,
+            borderRadius: 1,
             backgroundColor: '#fff',
-            willChange: 'height',
+            transform: `scaleY(${MIN_SCALE}) translateZ(0)`,
+            transformOrigin: 'center center',
+            willChange: 'transform',
           }}
         />
       ))}
@@ -101,9 +207,12 @@ function Waveform({ analyser }: { analyser: AnalyserNode | null }) {
 
 // Voice pill
 function VoicePill({ analyser }: { analyser: AnalyserNode | null }) {
+  const recordingState = useAppStore((state) => state.recordingState);
+  const isProcessing = recordingState === 'processing';
+
   return (
     <div style={{
-      width: 72,
+      width: 90,
       height: 28,
       display: 'flex',
       alignItems: 'center',
@@ -111,14 +220,14 @@ function VoicePill({ analyser }: { analyser: AnalyserNode | null }) {
       borderRadius: 14,
       background: '#000',
     }}>
-      <Waveform analyser={analyser} />
+      {isProcessing ? <ProcessingSpinner /> : <Waveform analyser={analyser} />}
     </div>
   );
 }
 
 // Main app
 function App() {
-  const { isDarkMode, setDarkMode } = useAppStore();
+  const setDarkMode = useAppStore((state) => state.setDarkMode);
   const { analyser } = useTranscription();
   const isSettingsPage = window.location.pathname === '/settings';
 
