@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 
 interface AudioCaptureOptions {
   onAudioData?: (data: Int16Array) => void;
@@ -11,6 +11,7 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const isCapturingRef = useRef(false);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
 
   const floatTo16BitPCM = useCallback((input: Float32Array): Int16Array => {
     const output = new Int16Array(input.length);
@@ -45,6 +46,7 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
+      setAnalyser(analyser);
 
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
@@ -80,6 +82,7 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
       analyserRef.current.disconnect();
       analyserRef.current = null;
     }
+    setAnalyser(null);
 
     if (audioContextRef.current) {
       audioContextRef.current.close();
@@ -92,13 +95,11 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
     }
   }, []);
 
-  const getAnalyser = useCallback(() => analyserRef.current, []);
-
   useEffect(() => {
     return () => {
       stop();
     };
   }, [stop]);
 
-  return { start, stop, getAnalyser, isCapturing: isCapturingRef.current };
+  return { start, stop, analyser, isCapturing: isCapturingRef.current };
 }

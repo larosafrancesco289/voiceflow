@@ -11,6 +11,7 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "security": {
       "capabilities": ["default"],
       "csp": null
@@ -19,20 +20,16 @@
       {
         "label": "main",
         "title": "VoiceFlow",
-        "width": 300,
-        "height": 80,
+        "width": 80,
+        "height": 36,
         "resizable": false,
         "visible": false,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true
       }
-    ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
-    }
+    ]
   },
   "bundle": {
     "active": true,

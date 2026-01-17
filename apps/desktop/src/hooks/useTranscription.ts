@@ -102,7 +102,7 @@ export function useTranscription() {
     },
   });
 
-  const { start: startCapture, stop: stopCapture, getAnalyser } = useAudioCapture({
+  const { start: startCapture, stop: stopCapture, analyser } = useAudioCapture({
     onAudioData: (data) => {
       sendAudio(data);
     },
@@ -176,6 +176,6 @@ export function useTranscription() {
     isReady,
     startRecording,
     stopRecording,
-    getAnalyser,
+    analyser,
   };
 }

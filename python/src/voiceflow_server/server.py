@@ -80,6 +80,31 @@ class Transcriber:
             self._loading = False
             self._loaded.set()
 
+    def _warmup(self, model):
+        """Run warmup inference to avoid cold start latency on first transcription.
+
+        Creates 0.5s of silent audio and runs inference to warm up the model's
+        computational graph. This prevents missing initial words on first use.
+        """
+        logger.info("Warming up model...")
+        try:
+            # Create 0.5 seconds of silent audio at 16kHz
+            silent_audio = np.zeros(8000, dtype=np.float32)
+
+            # Write to temp file and run inference
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                temp_path = Path(f.name)
+
+            try:
+                sf.write(temp_path, silent_audio, 16000)
+                _ = model.transcribe(temp_path)  # Discard result
+            finally:
+                temp_path.unlink(missing_ok=True)
+
+            logger.info("Warmup complete - model ready for fast transcription")
+        except Exception as e:
+            logger.warning(f"Warmup failed (non-critical): {e}")
+
     def _load_model_sync(self):
         """Synchronous model loading.
 
@@ -94,6 +119,10 @@ class Transcriber:
             # First run will download ~600MB from Hugging Face
             logger.info("Loading mlx-community/parakeet-tdt-0.6b-v3 (downloads ~600MB on first run)...")
             model = from_pretrained("mlx-community/parakeet-tdt-0.6b-v3")
+
+            # Warmup the model to avoid cold start latency
+            self._warmup(model)
+
             return model
         except ImportError:
             logger.warning("parakeet-mlx not available, using mock transcription")

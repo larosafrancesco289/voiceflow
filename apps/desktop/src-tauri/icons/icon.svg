@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#000000"/>
+
+  <!-- Waveform bars - 5 bars centered -->
+  <g transform="translate(256, 256)">
+    <!-- Bar 1 (leftmost) -->
+    <rect x="-80" y="-40" width="16" height="80" rx="8" fill="white"/>
+    <!-- Bar 2 -->
+    <rect x="-40" y="-60" width="16" height="120" rx="8" fill="white"/>
+    <!-- Bar 3 (center, tallest) -->
+    <rect x="-8" y="-80" width="16" height="160" rx="8" fill="white"/>
+    <!-- Bar 4 -->
+    <rect x="24" y="-60" width="16" height="120" rx="8" fill="white"/>
+    <!-- Bar 5 (rightmost) -->
+    <rect x="64" y="-40" width="16" height="80" rx="8" fill="white"/>
+  </g>
+</svg>

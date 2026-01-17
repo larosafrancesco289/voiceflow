@@ -1,211 +1,189 @@
 import { motion } from 'framer-motion';
 import { useAppStore } from '../../stores/appStore';
 
-interface SettingsSectionProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-function SettingsSection({ title, children }: SettingsSectionProps) {
-  const { isDarkMode } = useAppStore();
-
-  return (
-    <div className="mb-6">
-      <h3
-        className="text-xs font-semibold uppercase tracking-wider mb-3"
-        style={{
-          color: isDarkMode ? 'var(--text-tertiary)' : 'rgba(0, 0, 0, 0.4)',
-          fontFamily: 'var(--font-system)',
-        }}
-      >
-        {title}
-      </h3>
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-interface ToggleProps {
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-}
-
-function Toggle({ enabled, onChange }: ToggleProps) {
+// Refined toggle switch
+function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!enabled)}
-      className={`relative w-11 h-[26px] rounded-full transition-colors duration-200 ${
-        enabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'
-      }`}
+      className="relative w-10 h-6 rounded-full transition-all duration-200"
+      style={{
+        background: enabled ? '#22c55e' : 'rgba(255, 255, 255, 0.1)',
+      }}
     >
       <motion.div
-        className="absolute top-[3px] left-[3px] w-5 h-5 rounded-full bg-white shadow-sm"
-        animate={{ x: enabled ? 18 : 0 }}
+        className="absolute top-1 left-1 w-4 h-4 rounded-full"
+        style={{ background: '#fff' }}
+        animate={{ x: enabled ? 16 : 0 }}
         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
       />
     </button>
   );
 }
 
+// Keyboard shortcut badge
+function ShortcutBadge() {
+  return (
+    <div className="flex items-center gap-1">
+      <span
+        className="px-2 py-1 rounded text-xs font-medium"
+        style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'rgba(255, 255, 255, 0.9)' }}
+      >
+        ⌥
+      </span>
+      <span
+        className="px-2 py-1 rounded text-xs font-medium"
+        style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'rgba(255, 255, 255, 0.9)' }}
+      >
+        Space
+      </span>
+    </div>
+  );
+}
+
+// Setting row component
+function SettingRow({
+  label,
+  description,
+  children,
+  delay = 0,
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay }}
+      className="flex items-center justify-between py-4"
+      style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}
+    >
+      <div>
+        <p className="text-sm font-medium" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
+          {label}
+        </p>
+        {description && (
+          <p className="text-xs mt-0.5" style={{ color: 'rgba(255, 255, 255, 0.4)' }}>
+            {description}
+          </p>
+        )}
+      </div>
+      {children}
+    </motion.div>
+  );
+}
+
 export function Settings() {
-  const { isDarkMode, autoPasteEnabled, setAutoPasteEnabled, history, clearHistory } = useAppStore();
+  const { autoPasteEnabled, setAutoPasteEnabled, history, clearHistory } = useAppStore();
 
   return (
     <div
-      className={`min-h-screen p-6 ${isDarkMode ? 'dark' : ''}`}
+      className="min-h-screen p-6"
       style={{
-        fontFamily: 'var(--font-system)',
-        background: isDarkMode ? '#1c1c1e' : '#f5f5f7',
+        background: '#0a0a0a',
+        fontFamily: '-apple-system, BlinkMacSystemFont, system-ui, sans-serif',
       }}
     >
       {/* Header */}
-      <div className="mb-8">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="mb-8"
+      >
         <h1
-          className="text-2xl font-semibold"
-          style={{
-            color: isDarkMode ? 'var(--text-primary)' : 'rgba(0, 0, 0, 0.85)',
-            fontFamily: 'var(--font-system)',
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-          }}
+          className="text-xl font-semibold tracking-tight"
+          style={{ color: '#fff', letterSpacing: '-0.02em' }}
         >
           Settings
         </h1>
-        <p
-          className="text-sm mt-1"
-          style={{ color: isDarkMode ? 'var(--text-secondary)' : 'rgba(0, 0, 0, 0.5)' }}
+      </motion.div>
+
+      {/* Settings sections */}
+      <div className="space-y-1">
+        <SettingRow
+          label="Hold to record"
+          description="Press and hold, release to transcribe"
+          delay={0.05}
         >
-          Configure VoiceFlow preferences
-        </p>
+          <ShortcutBadge />
+        </SettingRow>
+
+        <SettingRow
+          label="Auto-paste"
+          description="Paste transcription automatically"
+          delay={0.1}
+        >
+          <Toggle enabled={autoPasteEnabled} onChange={setAutoPasteEnabled} />
+        </SettingRow>
       </div>
 
-      {/* Keyboard Shortcut Section */}
-      <SettingsSection title="Keyboard Shortcut">
-        <div className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p
-                className="text-sm font-medium"
-                style={{ color: isDarkMode ? 'var(--text-primary)' : 'rgba(0, 0, 0, 0.85)' }}
-              >
-                Hold to record
-              </p>
-              <p
-                className="text-xs mt-0.5"
-                style={{ color: isDarkMode ? 'var(--text-secondary)' : 'rgba(0, 0, 0, 0.5)' }}
-              >
-                Press and hold to start, release to transcribe
-              </p>
-            </div>
-            <div
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-              style={{
-                background: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                color: isDarkMode ? 'var(--text-primary)' : 'rgba(0, 0, 0, 0.7)',
-              }}
+      {/* History section */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+        className="mt-8"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
+            Recent ({history.length})
+          </p>
+          {history.length > 0 && (
+            <button
+              onClick={clearHistory}
+              className="text-xs transition-colors hover:opacity-80"
+              style={{ color: 'rgba(255, 255, 255, 0.4)' }}
             >
-              <span className="text-base">⌥</span>
-              <span>Space</span>
-            </div>
-          </div>
-        </div>
-      </SettingsSection>
-
-      {/* Behavior Section */}
-      <SettingsSection title="Behavior">
-        <div className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p
-                className="text-sm font-medium"
-                style={{ color: isDarkMode ? 'var(--text-primary)' : 'rgba(0, 0, 0, 0.85)' }}
-              >
-                Auto-paste
-              </p>
-              <p
-                className="text-xs mt-0.5"
-                style={{ color: isDarkMode ? 'var(--text-secondary)' : 'rgba(0, 0, 0, 0.5)' }}
-              >
-                Copy transcription to clipboard automatically
-              </p>
-            </div>
-            <Toggle enabled={autoPasteEnabled} onChange={setAutoPasteEnabled} />
-          </div>
-        </div>
-      </SettingsSection>
-
-      {/* History Section */}
-      <SettingsSection title="Recent Transcriptions">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p
-              className="text-sm"
-              style={{ color: isDarkMode ? 'var(--text-secondary)' : 'rgba(0, 0, 0, 0.5)' }}
-            >
-              {history.length} item{history.length !== 1 ? 's' : ''}
-            </p>
-            {history.length > 0 && (
-              <button
-                onClick={clearHistory}
-                className="text-xs font-medium transition-colors"
-                style={{ color: '#ef4444' }}
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {history.length === 0 ? (
-            <p
-              className="text-sm italic"
-              style={{ color: isDarkMode ? 'var(--text-tertiary)' : 'rgba(0, 0, 0, 0.3)' }}
-            >
-              No transcriptions yet. Hold ⌥ Space to start.
-            </p>
-          ) : (
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {history.slice(0, 5).map((item, index) => (
-                <div
-                  key={index}
-                  className="p-3 rounded-lg"
-                  style={{
-                    background: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
-                  }}
-                >
-                  <p
-                    className="text-sm truncate"
-                    style={{ color: isDarkMode ? 'var(--text-primary)' : 'rgba(0, 0, 0, 0.8)' }}
-                  >
-                    {item.text}
-                  </p>
-                  <p
-                    className="text-[10px] mt-1"
-                    style={{ color: isDarkMode ? 'var(--text-tertiary)' : 'rgba(0, 0, 0, 0.35)' }}
-                  >
-                    {new Date(item.timestamp).toLocaleTimeString()}
-                  </p>
-                </div>
-              ))}
-            </div>
+              Clear
+            </button>
           )}
         </div>
-      </SettingsSection>
 
-      {/* About */}
-      <div
-        className="mt-8 text-center text-xs"
-        style={{ color: isDarkMode ? 'var(--text-tertiary)' : 'rgba(0, 0, 0, 0.3)' }}
+        {history.length === 0 ? (
+          <p className="text-sm py-4" style={{ color: 'rgba(255, 255, 255, 0.25)' }}>
+            No transcriptions yet
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {history.slice(0, 5).map((item, index) => (
+              <motion.div
+                key={item.timestamp}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: 0.25 + index * 0.05 }}
+                className="p-3 rounded-lg"
+                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+              >
+                <p
+                  className="text-sm truncate"
+                  style={{ color: 'rgba(255, 255, 255, 0.8)' }}
+                >
+                  {item.text}
+                </p>
+                <p className="text-[10px] mt-1" style={{ color: 'rgba(255, 255, 255, 0.25)' }}>
+                  {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Footer */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, delay: 0.4 }}
+        className="absolute bottom-6 left-6 right-6 text-center"
       >
-        <p>VoiceFlow v0.1.0</p>
-        <p className="text-[10px] mt-1">Local speech-to-text powered by parakeet-mlx</p>
-      </div>
+        <p className="text-[11px]" style={{ color: 'rgba(255, 255, 255, 0.2)' }}>
+          VoiceFlow v0.1.0
+        </p>
+      </motion.div>
     </div>
   );
 }

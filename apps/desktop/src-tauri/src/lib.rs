@@ -19,7 +19,7 @@ fn position_bubble(app: &AppHandle) {
 
         if let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) {
             let work_area = monitor.work_area();
-            let margin = 24;
+            let margin = 8;
             let x = work_area.position.x + ((work_area.size.width as i32 - size.width as i32) / 2);
             let y = work_area.position.y
                 + work_area.size.height as i32
@@ -87,7 +87,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = Menu::with_items(app, &[&record_item, &settings_item, &quit_item])?;
 
-    let icon_bytes = include_bytes!("../icons/icon.png");
+    let icon_bytes = include_bytes!("../icons/tray-icon.png");
     let icon = Image::from_bytes(icon_bytes)?;
 
     let _tray = TrayIconBuilder::new()

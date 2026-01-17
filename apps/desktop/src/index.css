@@ -3,217 +3,49 @@
 @tailwind utilities;
 
 :root {
-  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-
-  /* Light mode colors */
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
   --bg-primary: #f5f5f7;
-  --bubble-bg: rgba(255, 255, 255, 0.78);
-  --bubble-border: rgba(255, 255, 255, 0.6);
-  --bubble-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
-  --bubble-shadow-recording: 0 8px 40px rgba(139, 92, 246, 0.25), 0 2px 12px rgba(0, 0, 0, 0.1);
-
   --text-primary: rgba(0, 0, 0, 0.85);
   --text-secondary: rgba(0, 0, 0, 0.45);
   --text-tertiary: rgba(0, 0, 0, 0.3);
-
-  --wave-idle: rgba(0, 0, 0, 0.15);
-  --wave-recording-1: #a78bfa;
-  --wave-recording-2: #818cf8;
-  --wave-recording-3: #6366f1;
-  --wave-complete: #34d399;
-
-  --kbd-bg: rgba(0, 0, 0, 0.06);
-  --kbd-text: rgba(0, 0, 0, 0.4);
 
   font-family: var(--font-system);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 .dark {
   --bg-primary: #1c1c1e;
-  --bubble-bg: rgba(28, 28, 30, 0.82);
-  --bubble-border: rgba(255, 255, 255, 0.08);
-  --bubble-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
-  --bubble-shadow-recording: 0 8px 40px rgba(139, 92, 246, 0.35), 0 2px 12px rgba(0, 0, 0, 0.3);
-
   --text-primary: rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.55);
   --text-tertiary: rgba(255, 255, 255, 0.35);
-
-  --wave-idle: rgba(255, 255, 255, 0.2);
-
-  --kbd-bg: rgba(255, 255, 255, 0.08);
-  --kbd-text: rgba(255, 255, 255, 0.4);
 }
 
+/* Transparent backgrounds for main window */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
 }
 
-/* Background color */
-html {
-  background: var(--bg-primary);
+* {
+  box-sizing: border-box;
 }
 
-/* Crystalline glass bubble */
-.voice-bubble {
-  background: var(--bubble-bg);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid var(--bubble-border);
-  border-radius: 20px;
-  box-shadow: var(--bubble-shadow);
-  transition: box-shadow 0.4s ease;
-}
-
-.voice-bubble.recording {
-  box-shadow: var(--bubble-shadow-recording);
-}
-
-/* Subtle inner glow for depth */
-.voice-bubble::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.15) 0%,
-    transparent 50%,
-    rgba(0, 0, 0, 0.02) 100%
-  );
-  pointer-events: none;
-}
-
-.dark .voice-bubble::before {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.06) 0%,
-    transparent 50%,
-    rgba(0, 0, 0, 0.1) 100%
-  );
-}
-
-/* Waveform bars - organic breathing animation */
-.wave-bar {
-  width: 3px;
-  border-radius: 1.5px;
-  background: var(--wave-idle);
-  transition: background 0.3s ease;
-}
-
-.wave-bar.recording {
-  background: linear-gradient(
-    180deg,
-    var(--wave-recording-1) 0%,
-    var(--wave-recording-2) 50%,
-    var(--wave-recording-3) 100%
-  );
-}
-
-.wave-bar.complete {
-  background: var(--wave-complete);
-}
-
-/* Processing spinner */
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
-}
-
-/* Keyboard shortcut badge */
-.kbd-badge {
-  font-family: var(--font-system);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--kbd-bg);
-  color: var(--kbd-text);
-}
-
-/* Hold-to-talk button */
-.hold-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--bubble-border);
-  background: rgba(255, 255, 255, 0.4);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.dark .hold-button {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hold-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.hold-button:not(:disabled) {
-  cursor: pointer;
-}
-
-.hold-button.recording {
-  color: var(--text-primary);
-  border-color: rgba(99, 102, 241, 0.6);
-  background: rgba(99, 102, 241, 0.15);
-}
-
-.dark .hold-button.recording {
-  background: rgba(99, 102, 241, 0.2);
-}
-
-.hold-button.processing {
-  color: var(--text-secondary);
-  border-color: rgba(0, 0, 0, 0.08);
-}
-
-.hold-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--wave-idle);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
-}
-
-.dark .hold-dot {
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
-}
-
-.hold-button.recording .hold-dot {
-  background: var(--wave-recording-2);
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
-}
-
-.hold-label {
-  line-height: 1;
+/* Settings page gets solid background */
+.settings-page {
+  background: #0a0a0a !important;
 }
 
 @layer utilities {
   .drag-region {
     -webkit-app-region: drag;
   }
-
   .no-drag {
     -webkit-app-region: no-drag;
   }
