@@ -1,0 +1,17 @@
+{
+  "name": "voiceflow",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "python"
+  ],
+  "scripts": {
+    "dev": "cd apps/desktop && bun run tauri dev",
+    "build": "cd apps/desktop && bun run tauri build",
+    "desktop": "cd apps/desktop && bun run dev",
+    "python": "cd python && python -m voiceflow_server"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
