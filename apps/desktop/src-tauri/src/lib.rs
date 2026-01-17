@@ -1,26 +1,13 @@
-use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent},
+    tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 static IS_RECORDING: AtomicBool = AtomicBool::new(false);
-static TRIGGER_KEYS: Lazy<Mutex<Vec<String>>> =
-    Lazy::new(|| Mutex::new(vec!["fn".to_string(), "capslock".to_string()]));
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TranscriptionHistory {
-    text: String,
-    timestamp: u64,
-}
-
-static HISTORY: Lazy<Mutex<Vec<TranscriptionHistory>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 fn position_bubble(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -41,42 +28,6 @@ fn position_bubble(app: &AppHandle) {
             let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
         }
     }
-}
-
-#[tauri::command]
-fn get_trigger_keys() -> Vec<String> {
-    TRIGGER_KEYS.lock().unwrap().clone()
-}
-
-#[tauri::command]
-fn set_trigger_keys(keys: Vec<String>) {
-    let mut trigger_keys = TRIGGER_KEYS.lock().unwrap();
-    *trigger_keys = keys;
-}
-
-#[tauri::command]
-fn add_to_history(text: String) {
-    let mut history = HISTORY.lock().unwrap();
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
-    history.insert(0, TranscriptionHistory { text, timestamp });
-
-    if history.len() > 20 {
-        history.pop();
-    }
-}
-
-#[tauri::command]
-fn get_history() -> Vec<TranscriptionHistory> {
-    HISTORY.lock().unwrap().clone()
-}
-
-#[tauri::command]
-fn clear_history() {
-    HISTORY.lock().unwrap().clear();
 }
 
 #[tauri::command]
@@ -122,38 +73,11 @@ async fn paste_from_clipboard() -> Result<(), String> {
 
         if !result.status.success() {
             let stderr = String::from_utf8_lossy(&result.stderr);
-            println!("[voiceflow] Paste failed: {}", stderr);
+            eprintln!("[voiceflow] Paste failed: {}", stderr);
             return Err(stderr.to_string());
         }
-        println!("[voiceflow] Paste successful");
     }
     Ok(())
-}
-
-#[tauri::command]
-fn is_recording() -> bool {
-    IS_RECORDING.load(Ordering::SeqCst)
-}
-
-#[tauri::command]
-async fn start_recording(app: AppHandle) {
-    if !IS_RECORDING.load(Ordering::SeqCst) {
-        IS_RECORDING.store(true, Ordering::SeqCst);
-        let _ = app.emit("recording-start", ());
-        if let Some(window) = app.get_webview_window("main") {
-            position_bubble(&app);
-            let _ = window.show();
-            // Don't focus - keep focus on the previous app
-        }
-    }
-}
-
-#[tauri::command]
-async fn stop_recording(app: AppHandle) {
-    if IS_RECORDING.load(Ordering::SeqCst) {
-        IS_RECORDING.store(false, Ordering::SeqCst);
-        let _ = app.emit("recording-stop", ());
-    }
 }
 
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -171,23 +95,16 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "quit" => {
-                println!("[voiceflow] Quitting...");
-                app.exit(0);
-            }
+            "quit" => app.exit(0),
             "record" => {
-                println!("[voiceflow] Record clicked");
                 if let Some(window) = app.get_webview_window("main") {
                     position_bubble(app);
                     let _ = window.show();
-                    // Don't focus - keep focus on the previous app
                 }
             }
             "settings" => {
-                println!("[voiceflow] Settings clicked");
                 if let Some(window) = app.get_webview_window("settings") {
                     let _ = window.show();
-                    // Don't focus - keep focus on the previous app
                 } else {
                     let _ = WebviewWindowBuilder::new(
                         app,
@@ -202,11 +119,6 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => {}
         })
-        .on_tray_icon_event(|_tray, event| {
-            if let TrayIconEvent::DoubleClick { .. } = event {
-                println!("[voiceflow] Tray double-clicked");
-            }
-        })
         .build(app)?;
 
     Ok(())
@@ -214,21 +126,15 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    println!("[voiceflow] Starting VoiceFlow...");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
-            println!("[voiceflow] Setting up app...");
-
-            // Setup tray
             if let Err(e) = setup_tray(app.handle()) {
                 eprintln!("[voiceflow] Failed to setup tray: {}", e);
             }
 
-            // Setup global shortcut (Option+Space for hold-to-record)
             let app_handle = app.handle().clone();
             let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
 
@@ -238,22 +144,17 @@ pub fn run() {
 
                     match event.state() {
                         ShortcutState::Pressed => {
-                            // Start recording on key press
                             if !IS_RECORDING.load(Ordering::SeqCst) {
-                                println!("[voiceflow] Shortcut pressed: starting recording");
                                 IS_RECORDING.store(true, Ordering::SeqCst);
                                 let _ = app_handle.emit("recording-start", ());
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     position_bubble(&app_handle);
                                     let _ = window.show();
-                                    // Don't focus - keep focus on the previous app
                                 }
                             }
                         }
                         ShortcutState::Released => {
-                            // Stop recording on key release
                             if IS_RECORDING.load(Ordering::SeqCst) {
-                                println!("[voiceflow] Shortcut released: stopping recording");
                                 IS_RECORDING.store(false, Ordering::SeqCst);
                                 let _ = app_handle.emit("recording-stop", ());
                             }
@@ -264,30 +165,16 @@ pub fn run() {
 
             if let Err(e) = app.handle().plugin(shortcut_plugin) {
                 eprintln!("[voiceflow] Failed to setup global shortcut plugin: {}", e);
-            } else {
-                // Register the shortcut
-                if let Err(e) = app.global_shortcut().register(shortcut) {
-                    eprintln!("[voiceflow] Failed to register shortcut: {}", e);
-                } else {
-                    println!("[voiceflow] Global shortcut Option+Space registered (hold to record)");
-                }
+            } else if let Err(e) = app.global_shortcut().register(shortcut) {
+                eprintln!("[voiceflow] Failed to register shortcut: {}", e);
             }
 
-            println!("[voiceflow] App setup complete!");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_trigger_keys,
-            set_trigger_keys,
-            add_to_history,
-            get_history,
-            clear_history,
             show_bubble,
             hide_bubble,
             paste_from_clipboard,
-            is_recording,
-            start_recording,
-            stop_recording,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

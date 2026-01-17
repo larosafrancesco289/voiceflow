@@ -181,15 +181,14 @@ function VoiceBubble({ getAnalyser, isReady, isConnected, onHoldStart, onHoldEnd
   const isProcessing = recordingState === 'processing';
   const isComplete = recordingState === 'complete';
 
-  const statusText = isRecording
-    ? 'Listening...'
-    : isProcessing
-      ? 'Transcribing...'
-      : !isConnected
-        ? 'Starting server...'
-        : !isReady
-          ? 'Loading model...'
-          : 'Hold to talk';
+  const getStatusText = () => {
+    if (isRecording) return 'Listening...';
+    if (isProcessing) return 'Transcribing...';
+    if (!isConnected) return 'Starting server...';
+    if (!isReady) return 'Loading model...';
+    return 'Hold to talk';
+  };
+  const statusText = getStatusText();
 
   return (
     <motion.div
@@ -353,7 +352,7 @@ function App() {
   return (
     <div
       className={`h-full w-full flex items-center justify-center p-2 ${isDarkMode ? 'dark' : ''}`}
-      style={{ background: isDarkMode ? '#1c1c1e' : '#f5f5f7' }}
+      style={{ background: 'var(--bg-primary)' }}
     >
       <VoiceBubble
         getAnalyser={getAnalyser}

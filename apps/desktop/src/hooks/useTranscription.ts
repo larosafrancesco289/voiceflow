@@ -46,8 +46,6 @@ export function useTranscription() {
     serverStartingRef.current = true;
     try {
       const command = Command.sidecar('voiceflow-server');
-      command.stdout.on('data', (line) => console.log(`[voiceflow-server] ${line}`));
-      command.stderr.on('data', (line) => console.warn(`[voiceflow-server] ${line}`));
       const child = await command.spawn();
       serverProcessRef.current = child;
     } catch (error) {
@@ -72,20 +70,13 @@ export function useTranscription() {
 
       if (autoPasteEnabled) {
         try {
-          // Copy to clipboard
           await writeText(text);
-          await invoke('add_to_history', { text });
-          // Hide bubble and paste immediately (window doesn't steal focus)
           await invoke('hide_bubble');
-          // Simulate Cmd+V to paste
-          console.log('[Transcription] Pasting text...');
           await invoke('paste_from_clipboard');
-          console.log('[Transcription] Paste complete');
-          // Reset state after pasting
           reset();
           return;
         } catch (error) {
-          console.error('Failed to paste:', error);
+          console.error('[Transcription] Failed to paste:', error);
         }
       }
 
@@ -105,12 +96,9 @@ export function useTranscription() {
     },
     onFinal: handleFinalTranscription,
     onError: (error) => {
-      console.error('Transcription error:', error);
+      console.error('[Transcription] WebSocket error:', error);
       setRecordingState('idle');
       ensureServerRunning();
-    },
-    onReady: () => {
-      console.log('Transcription server ready');
     },
   });
 
@@ -119,31 +107,22 @@ export function useTranscription() {
       sendAudio(data);
     },
     onError: (error) => {
-      console.error('Audio capture error:', error);
+      console.error('[Transcription] Audio capture error:', error);
       setRecordingState('idle');
     },
   });
 
   const startRecording = useCallback(async () => {
-    console.log('[Transcription] startRecording called, state:', recordingState);
-    if (recordingState !== 'idle') {
-      console.log('[Transcription] Not idle, skipping');
-      return;
-    }
-    if (!isConnected || !isReady) {
-      console.log('[Transcription] Server not ready, skipping');
-      return;
-    }
+    if (recordingState !== 'idle') return;
+    if (!isConnected || !isReady) return;
 
     try {
-      console.log('[Transcription] Starting recording...');
       await invoke('show_bubble');
       setRecordingState('recording');
       setPartialTranscription('');
       setCurrentTranscription('');
       startStream();
       await startCapture();
-      console.log('[Transcription] Recording started');
     } catch (error) {
       console.error('[Transcription] Failed to start recording:', error);
       setRecordingState('idle');
@@ -160,47 +139,27 @@ export function useTranscription() {
   ]);
 
   const stopRecording = useCallback(async () => {
-    console.log('[Transcription] stopRecording called, state:', recordingState);
-    if (recordingState !== 'recording') {
-      console.log('[Transcription] Not recording, skipping');
-      return;
-    }
+    if (recordingState !== 'recording') return;
 
-    console.log('[Transcription] Stopping recording...');
     setRecordingState('processing');
     stopCapture();
     endStream();
-    console.log('[Transcription] Recording stopped, processing...');
   }, [recordingState, setRecordingState, stopCapture, endStream]);
 
-  // Connect WebSocket once on mount
-  const connectRef = useRef(connect);
-  const ensureServerRunningRef = useRef(ensureServerRunning);
-
-  useEffect(() => {
-    connectRef.current = connect;
-    ensureServerRunningRef.current = ensureServerRunning;
-  }, [connect, ensureServerRunning]);
-
-  useEffect(() => {
-    ensureServerRunningRef.current();
-    connectRef.current();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Setup event listeners with refs to avoid re-registration
+  // Refs to hold latest callbacks (avoid stale closures in event listeners)
   const startRecordingRef = useRef(startRecording);
   const stopRecordingRef = useRef(stopRecording);
+  startRecordingRef.current = startRecording;
+  stopRecordingRef.current = stopRecording;
 
+  // One-time setup: connect to server and register event listeners
   useEffect(() => {
-    startRecordingRef.current = startRecording;
-    stopRecordingRef.current = stopRecording;
-  }, [startRecording, stopRecording]);
+    ensureServerRunning();
+    connect();
 
-  useEffect(() => {
     const unlistenStart = listen('recording-start', () => {
       startRecordingRef.current();
     });
-
     const unlistenStop = listen('recording-stop', () => {
       stopRecordingRef.current();
     });
@@ -209,7 +168,7 @@ export function useTranscription() {
       unlistenStart.then((fn) => fn());
       unlistenStop.then((fn) => fn());
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     recordingState,
