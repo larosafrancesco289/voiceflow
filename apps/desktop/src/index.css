@@ -182,6 +182,73 @@ html:has(.dark) {
   color: var(--kbd-text);
 }
 
+/* Hold-to-talk button */
+.hold-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bubble-border);
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.dark .hold-button {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hold-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hold-button:not(:disabled) {
+  cursor: pointer;
+}
+
+.hold-button.recording {
+  color: var(--text-primary);
+  border-color: rgba(99, 102, 241, 0.6);
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.dark .hold-button.recording {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.hold-button.processing {
+  color: var(--text-secondary);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.hold-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--wave-idle);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+}
+
+.dark .hold-dot {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.hold-button.recording .hold-dot {
+  background: var(--wave-recording-2);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+}
+
+.hold-label {
+  line-height: 1;
+}
+
 @layer utilities {
   .drag-region {
     -webkit-app-region: drag;

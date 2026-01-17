@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { Command, Child } from '@tauri-apps/plugin-shell';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useAppStore } from '../stores/appStore';
 import { useAudioCapture } from './useAudioCapture';
 import { useWebSocket } from './useWebSocket';
 
 const WS_URL = 'ws://127.0.0.1:8765/ws';
+const HEALTH_URL = 'http://127.0.0.1:8765/health';
 
 export function useTranscription() {
   const {
@@ -18,6 +20,42 @@ export function useTranscription() {
     autoPasteEnabled,
     reset,
   } = useAppStore();
+
+  const serverProcessRef = useRef<Child | null>(null);
+  const serverStartingRef = useRef(false);
+
+  const checkServerHealth = useCallback(async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 500);
+      const response = await fetch(HEALTH_URL, { signal: controller.signal });
+      clearTimeout(timeout);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const ensureServerRunning = useCallback(async () => {
+    if (!isTauri()) return;
+    if (serverProcessRef.current || serverStartingRef.current) return;
+
+    const isHealthy = await checkServerHealth();
+    if (isHealthy) return;
+
+    serverStartingRef.current = true;
+    try {
+      const command = Command.sidecar('voiceflow-server');
+      command.stdout.on('data', (line) => console.log(`[voiceflow-server] ${line}`));
+      command.stderr.on('data', (line) => console.warn(`[voiceflow-server] ${line}`));
+      const child = await command.spawn();
+      serverProcessRef.current = child;
+    } catch (error) {
+      console.error('[Transcription] Failed to start server:', error);
+    } finally {
+      serverStartingRef.current = false;
+    }
+  }, [checkServerHealth]);
 
   const handleFinalTranscription = useCallback(
     async (text: string) => {
@@ -34,16 +72,24 @@ export function useTranscription() {
 
       if (autoPasteEnabled) {
         try {
+          // Copy to clipboard
           await writeText(text);
           await invoke('add_to_history', { text });
-          // Small delay before hiding to allow clipboard to settle
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          // Hide bubble first so paste goes to the correct app
+          await invoke('hide_bubble');
+          // Small delay to let the previous app regain focus
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Simulate Cmd+V to paste
+          await invoke('paste_from_clipboard');
+          // Reset state after pasting
+          reset();
+          return;
         } catch (error) {
           console.error('Failed to paste:', error);
         }
       }
 
-      // Hide after showing the result briefly
+      // Hide after showing the result briefly (only if not auto-pasting)
       setTimeout(() => {
         reset();
         invoke('hide_bubble');
@@ -61,6 +107,7 @@ export function useTranscription() {
     onError: (error) => {
       console.error('Transcription error:', error);
       setRecordingState('idle');
+      ensureServerRunning();
     },
     onReady: () => {
       console.log('Transcription server ready');
@@ -83,6 +130,10 @@ export function useTranscription() {
       console.log('[Transcription] Not idle, skipping');
       return;
     }
+    if (!isConnected || !isReady) {
+      console.log('[Transcription] Server not ready, skipping');
+      return;
+    }
 
     try {
       console.log('[Transcription] Starting recording...');
@@ -97,7 +148,16 @@ export function useTranscription() {
       console.error('[Transcription] Failed to start recording:', error);
       setRecordingState('idle');
     }
-  }, [recordingState, setRecordingState, setPartialTranscription, setCurrentTranscription, startStream, startCapture]);
+  }, [
+    recordingState,
+    isConnected,
+    isReady,
+    setRecordingState,
+    setPartialTranscription,
+    setCurrentTranscription,
+    startStream,
+    startCapture,
+  ]);
 
   const stopRecording = useCallback(async () => {
     console.log('[Transcription] stopRecording called, state:', recordingState);
@@ -114,8 +174,17 @@ export function useTranscription() {
   }, [recordingState, setRecordingState, stopCapture, endStream]);
 
   // Connect WebSocket once on mount
+  const connectRef = useRef(connect);
+  const ensureServerRunningRef = useRef(ensureServerRunning);
+
   useEffect(() => {
-    connect();
+    connectRef.current = connect;
+    ensureServerRunningRef.current = ensureServerRunning;
+  }, [connect, ensureServerRunning]);
+
+  useEffect(() => {
+    ensureServerRunningRef.current();
+    connectRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Setup event listeners with refs to avoid re-registration

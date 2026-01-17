@@ -6,7 +6,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
@@ -21,6 +21,27 @@ struct TranscriptionHistory {
 }
 
 static HISTORY: Lazy<Mutex<Vec<TranscriptionHistory>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
+fn position_bubble(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let monitor = window
+            .current_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| window.primary_monitor().ok().flatten());
+
+        if let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) {
+            let work_area = monitor.work_area();
+            let margin = 24;
+            let x = work_area.position.x + ((work_area.size.width as i32 - size.width as i32) / 2);
+            let y = work_area.position.y
+                + work_area.size.height as i32
+                - size.height as i32
+                - margin;
+            let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
+        }
+    }
+}
 
 #[tauri::command]
 fn get_trigger_keys() -> Vec<String> {
@@ -61,6 +82,7 @@ fn clear_history() {
 #[tauri::command]
 async fn show_bubble(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        position_bubble(&app);
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -74,6 +96,25 @@ async fn hide_bubble(app: AppHandle) {
 }
 
 #[tauri::command]
+async fn paste_from_clipboard() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        // Use AppleScript to simulate Cmd+V paste
+        let result = Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"v\" using command down")
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if !result.status.success() {
+            return Err(String::from_utf8_lossy(&result.stderr).to_string());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn is_recording() -> bool {
     IS_RECORDING.load(Ordering::SeqCst)
 }
@@ -84,6 +125,7 @@ async fn start_recording(app: AppHandle) {
         IS_RECORDING.store(true, Ordering::SeqCst);
         let _ = app.emit("recording-start", ());
         if let Some(window) = app.get_webview_window("main") {
+            position_bubble(&app);
             let _ = window.show();
             let _ = window.set_focus();
         }
@@ -120,6 +162,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "record" => {
                 println!("[voiceflow] Record clicked");
                 if let Some(window) = app.get_webview_window("main") {
+                    position_bubble(app);
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -185,6 +228,7 @@ pub fn run() {
                                 IS_RECORDING.store(true, Ordering::SeqCst);
                                 let _ = app_handle.emit("recording-start", ());
                                 if let Some(window) = app_handle.get_webview_window("main") {
+                                    position_bubble(&app_handle);
                                     let _ = window.show();
                                     let _ = window.set_focus();
                                 }
@@ -224,6 +268,7 @@ pub fn run() {
             clear_history,
             show_bubble,
             hide_bubble,
+            paste_from_clipboard,
             is_recording,
             start_recording,
             stop_recording,

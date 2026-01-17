@@ -11,6 +11,16 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "shell:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "voiceflow-server",
+          "sidecar": true,
+          "args": false
+        }
+      ]
+    },
     "global-shortcut:default",
     "process:default",
     "clipboard-manager:default",

@@ -193,7 +193,7 @@ function VoiceBubble({ getAnalyser, isReady, isConnected, onHoldStart, onHoldEnd
 
   return (
     <motion.div
-      className={`voice-bubble relative w-[300px] h-[68px] flex items-center px-4 gap-3 drag-region ${
+      className={`voice-bubble relative w-[300px] h-[64px] flex items-center px-4 gap-3 drag-region ${
         isRecording ? 'recording' : ''
       }`}
       initial={{ opacity: 0, scale: 0.9, y: 8 }}
@@ -293,7 +293,6 @@ function VoiceBubble({ getAnalyser, isReady, isConnected, onHoldStart, onHoldEnd
             onHoldStart();
           }}
           onPointerUp={() => onHoldEnd()}
-          onPointerLeave={() => onHoldEnd()}
           onPointerCancel={() => onHoldEnd()}
           disabled={!isReady && !isRecording}
           aria-pressed={isRecording}
