@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -21,26 +21,33 @@ export function useTranscription() {
 
   const handleFinalTranscription = useCallback(
     async (text: string) => {
+      // If no transcription, just reset and hide immediately
+      if (!text.trim()) {
+        reset();
+        invoke('hide_bubble');
+        return;
+      }
+
       setCurrentTranscription(text);
       setRecordingState('complete');
       addToHistory(text);
 
-      if (autoPasteEnabled && text.trim()) {
+      if (autoPasteEnabled) {
         try {
           await writeText(text);
           await invoke('add_to_history', { text });
           // Small delay before hiding to allow clipboard to settle
           await new Promise((resolve) => setTimeout(resolve, 50));
-          await invoke('hide_bubble');
         } catch (error) {
           console.error('Failed to paste:', error);
         }
       }
 
+      // Hide after showing the result briefly
       setTimeout(() => {
         reset();
         invoke('hide_bubble');
-      }, 1500);
+      }, 1000);
     },
     [setCurrentTranscription, setRecordingState, addToHistory, autoPasteEnabled, reset]
   );
@@ -106,22 +113,34 @@ export function useTranscription() {
     console.log('[Transcription] Recording stopped, processing...');
   }, [recordingState, setRecordingState, stopCapture, endStream]);
 
+  // Connect WebSocket once on mount
   useEffect(() => {
     connect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Setup event listeners with refs to avoid re-registration
+  const startRecordingRef = useRef(startRecording);
+  const stopRecordingRef = useRef(stopRecording);
+
+  useEffect(() => {
+    startRecordingRef.current = startRecording;
+    stopRecordingRef.current = stopRecording;
+  }, [startRecording, stopRecording]);
+
+  useEffect(() => {
     const unlistenStart = listen('recording-start', () => {
-      startRecording();
+      startRecordingRef.current();
     });
 
     const unlistenStop = listen('recording-stop', () => {
-      stopRecording();
+      stopRecordingRef.current();
     });
 
     return () => {
       unlistenStart.then((fn) => fn());
       unlistenStop.then((fn) => fn());
     };
-  }, [connect, startRecording, stopRecording]);
+  }, []);
 
   return {
     recordingState,

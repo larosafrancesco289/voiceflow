@@ -4209,6 +4209,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-process",
  "tauri-plugin-shell",
+ "window-vibrancy",
 ]
 
 [[package]]

@@ -19,11 +19,16 @@
       {
         "label": "main",
         "title": "VoiceFlow",
-        "width": 400,
-        "height": 200,
-        "resizable": true,
-        "visible": true,
-        "center": true
+        "width": 300,
+        "height": 80,
+        "resizable": false,
+        "visible": false,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "x": 100,
+        "y": 100
       }
     ],
     "trayIcon": {

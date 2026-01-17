@@ -3,29 +3,183 @@
 @tailwind utilities;
 
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+
+  /* Light mode colors */
+  --bubble-bg: rgba(255, 255, 255, 0.78);
+  --bubble-border: rgba(255, 255, 255, 0.6);
+  --bubble-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --bubble-shadow-recording: 0 8px 40px rgba(139, 92, 246, 0.25), 0 2px 12px rgba(0, 0, 0, 0.1);
+
+  --text-primary: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.45);
+  --text-tertiary: rgba(0, 0, 0, 0.3);
+
+  --wave-idle: rgba(0, 0, 0, 0.15);
+  --wave-recording-1: #a78bfa;
+  --wave-recording-2: #818cf8;
+  --wave-recording-3: #6366f1;
+  --wave-complete: #34d399;
+
+  --kbd-bg: rgba(0, 0, 0, 0.06);
+  --kbd-text: rgba(0, 0, 0, 0.4);
+
+  font-family: var(--font-system);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+.dark {
+  --bubble-bg: rgba(28, 28, 30, 0.82);
+  --bubble-border: rgba(255, 255, 255, 0.08);
+  --bubble-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --bubble-shadow-recording: 0 8px 40px rgba(139, 92, 246, 0.35), 0 2px 12px rgba(0, 0, 0, 0.3);
+
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary: rgba(255, 255, 255, 0.35);
+
+  --wave-idle: rgba(255, 255, 255, 0.2);
+
+  --kbd-bg: rgba(255, 255, 255, 0.08);
+  --kbd-text: rgba(255, 255, 255, 0.4);
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  background: transparent;
   overflow: hidden;
 }
 
-.glass-morphism {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+/* Light mode background */
+html {
+  background: #f5f5f7;
 }
 
-.dark .glass-morphism {
-  background: rgba(30, 30, 30, 0.72);
+/* Dark mode background */
+.dark html,
+html:has(.dark) {
+  background: #1c1c1e;
+}
+
+/* Crystalline glass bubble */
+.voice-bubble {
+  background: var(--bubble-bg);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--bubble-border);
+  border-radius: 20px;
+  box-shadow: var(--bubble-shadow);
+  transition: box-shadow 0.4s ease;
+}
+
+.voice-bubble.recording {
+  box-shadow: var(--bubble-shadow-recording);
+}
+
+/* Subtle inner glow for depth */
+.voice-bubble::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.02) 100%
+  );
+  pointer-events: none;
+}
+
+.dark .voice-bubble::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+}
+
+/* Waveform bars - organic breathing animation */
+.wave-bar {
+  width: 3px;
+  border-radius: 1.5px;
+  background: var(--wave-idle);
+  transition: background 0.3s ease;
+}
+
+.wave-bar.recording {
+  background: linear-gradient(
+    180deg,
+    var(--wave-recording-1) 0%,
+    var(--wave-recording-2) 50%,
+    var(--wave-recording-3) 100%
+  );
+}
+
+.wave-bar.complete {
+  background: var(--wave-complete);
+}
+
+/* Breathing animation for individual bars */
+@keyframes breathe-1 {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes breathe-2 {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(0.9); }
+}
+
+@keyframes breathe-3 {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(0.8); }
+}
+
+@keyframes breathe-4 {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(0.95); }
+}
+
+@keyframes breathe-5 {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(0.85); }
+}
+
+/* Processing spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Text scroll animation for long transcriptions */
+@keyframes scroll-text {
+  0%, 20% { transform: translateX(0); }
+  80%, 100% { transform: translateX(calc(-100% + 160px)); }
+}
+
+.scroll-text {
+  animation: scroll-text 8s ease-in-out infinite;
+}
+
+/* Keyboard shortcut badge */
+.kbd-badge {
+  font-family: var(--font-system);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--kbd-bg);
+  color: var(--kbd-text);
 }
 
 @layer utilities {

@@ -100,7 +100,7 @@ async fn stop_recording(app: AppHandle) {
 
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit VoiceFlow", true, Some("CmdOrCtrl+Q"))?;
-    let record_item = MenuItem::with_id(app, "record", "Start Recording", true, Some("CmdOrCtrl+R"))?;
+    let record_item = MenuItem::with_id(app, "record", "Hold ⌥ Space to Record", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
 
     let menu = Menu::with_items(app, &[&record_item, &settings_item, &quit_item])?;
@@ -169,25 +169,33 @@ pub fn run() {
                 eprintln!("[voiceflow] Failed to setup tray: {}", e);
             }
 
-            // Setup global shortcut (Cmd+Shift+Space to toggle recording)
+            // Setup global shortcut (Option+Space for hold-to-record)
             let app_handle = app.handle().clone();
-            let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
+            let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
 
             let shortcut_plugin = tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |_app, _shortcut, event| {
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let is_recording = IS_RECORDING.load(Ordering::SeqCst);
-                        if is_recording {
-                            println!("[voiceflow] Shortcut: stopping recording");
-                            IS_RECORDING.store(false, Ordering::SeqCst);
-                            let _ = app_handle.emit("recording-stop", ());
-                        } else {
-                            println!("[voiceflow] Shortcut: starting recording");
-                            IS_RECORDING.store(true, Ordering::SeqCst);
-                            let _ = app_handle.emit("recording-start", ());
-                            if let Some(window) = app_handle.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                    use tauri_plugin_global_shortcut::ShortcutState;
+
+                    match event.state() {
+                        ShortcutState::Pressed => {
+                            // Start recording on key press
+                            if !IS_RECORDING.load(Ordering::SeqCst) {
+                                println!("[voiceflow] Shortcut pressed: starting recording");
+                                IS_RECORDING.store(true, Ordering::SeqCst);
+                                let _ = app_handle.emit("recording-start", ());
+                                if let Some(window) = app_handle.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        ShortcutState::Released => {
+                            // Stop recording on key release
+                            if IS_RECORDING.load(Ordering::SeqCst) {
+                                println!("[voiceflow] Shortcut released: stopping recording");
+                                IS_RECORDING.store(false, Ordering::SeqCst);
+                                let _ = app_handle.emit("recording-stop", ());
                             }
                         }
                     }
@@ -201,7 +209,7 @@ pub fn run() {
                 if let Err(e) = app.global_shortcut().register(shortcut) {
                     eprintln!("[voiceflow] Failed to register shortcut: {}", e);
                 } else {
-                    println!("[voiceflow] Global shortcut Cmd+Shift+Space registered");
+                    println!("[voiceflow] Global shortcut Option+Space registered (hold to record)");
                 }
             }
 

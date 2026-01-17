@@ -9,7 +9,6 @@ interface AppState {
   currentTranscription: string;
   partialTranscription: string;
   audioLevel: number;
-  triggerKeys: string[];
   autoPasteEnabled: boolean;
   history: Array<{ text: string; timestamp: number }>;
 
@@ -18,7 +17,6 @@ interface AppState {
   setCurrentTranscription: (text: string) => void;
   setPartialTranscription: (text: string) => void;
   setAudioLevel: (level: number) => void;
-  setTriggerKeys: (keys: string[]) => void;
   setAutoPasteEnabled: (enabled: boolean) => void;
   addToHistory: (text: string) => void;
   clearHistory: () => void;
@@ -33,7 +31,6 @@ export const useAppStore = create<AppState>()(
       currentTranscription: '',
       partialTranscription: '',
       audioLevel: 0,
-      triggerKeys: ['fn', 'capslock'],
       autoPasteEnabled: true,
       history: [],
 
@@ -42,7 +39,6 @@ export const useAppStore = create<AppState>()(
       setCurrentTranscription: (text) => set({ currentTranscription: text }),
       setPartialTranscription: (text) => set({ partialTranscription: text }),
       setAudioLevel: (level) => set({ audioLevel: level }),
-      setTriggerKeys: (keys) => set({ triggerKeys: keys }),
       setAutoPasteEnabled: (enabled) => set({ autoPasteEnabled: enabled }),
       addToHistory: (text) =>
         set((state) => ({
@@ -63,7 +59,6 @@ export const useAppStore = create<AppState>()(
     {
       name: 'voiceflow-storage',
       partialize: (state) => ({
-        triggerKeys: state.triggerKeys,
         autoPasteEnabled: state.autoPasteEnabled,
         history: state.history,
       }),

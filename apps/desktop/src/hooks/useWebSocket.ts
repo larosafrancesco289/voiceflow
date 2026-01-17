@@ -58,7 +58,8 @@ export function useWebSocket({
               if (message.text) onPartial?.(message.text);
               break;
             case 'final':
-              if (message.text) onFinal?.(message.text);
+              // Always call onFinal, even with empty text, to transition out of processing state
+              onFinal?.(message.text || '');
               break;
             case 'error':
               if (message.error) onError?.(message.error);
