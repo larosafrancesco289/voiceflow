@@ -1,21 +1,24 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore } from '../stores/appStore';
 
 const BAR_COUNT = 15;
 const MAX_HEIGHT = 20;
 const MIN_HEIGHT = 3;
 const MIN_SCALE = MIN_HEIGHT / MAX_HEIGHT;
-const NOISE_FLOOR = 0.02;
-const AUDIO_SMOOTH_MS = 50;
-const ATTACK_MS = 40;
-const RELEASE_MS = 120;
-const IDLE_SMOOTH_MS = 180;
 
-// Center-out mapping: index 7 is center, bars mirror outward
 const CENTER = Math.floor(BAR_COUNT / 2);
-const centerOutOrder = Array.from({ length: BAR_COUNT }, (_, displayIdx) => {
-  const distFromCenter = Math.abs(displayIdx - CENTER);
-  return CENTER - distFromCenter;
+
+// Amplitude curve: center bars taller, edges smaller
+const barHeights = Array.from({ length: BAR_COUNT }, (_, i) => {
+  const distFromCenter = Math.abs(i - CENTER);
+  const normalized = distFromCenter / CENTER;
+  return Math.cos(normalized * Math.PI * 0.45); // Smooth bell curve
+});
+
+// Random offsets for each bar (seeded by position for consistency)
+const barRandomOffsets = Array.from({ length: BAR_COUNT }, (_, i) => {
+  const phi = 1.618033988749;
+  return (i * phi) % 1 * Math.PI * 2; // Golden ratio based pseudo-random
 });
 
 interface WaveformProps {
@@ -23,103 +26,74 @@ interface WaveformProps {
 }
 
 /**
- * Smooth waveform visualization with audio-aware smoothing + GPU-friendly transforms.
- * Shows audio reactivity during recording, idle breathing animation otherwise.
+ * Simple voice-activated waveform.
+ * Detects speaking (binary), then plays smooth left-to-right breathing animation.
  */
 export function Waveform({ analyser }: WaveformProps) {
   const recordingState = useAppStore((state) => state.recordingState);
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
   const animationRef = useRef<number | null>(null);
-  const smoothedLevels = useRef<number[]>(new Array(BAR_COUNT).fill(0));
   const displayLevels = useRef<number[]>(new Array(BAR_COUNT).fill(0));
+  const isSpeakingRef = useRef(0); // Smoothed 0-1 value
+  const phaseRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
 
   const isRecording = recordingState === 'recording';
 
-  // Memoize segment ranges to avoid recalculating on every frame
-  const segmentRanges = useMemo(() => {
-    if (!analyser) return null;
-    const binCount = analyser.frequencyBinCount;
-    const voiceStart = Math.floor(binCount * 0.01);
-    const voiceEnd = Math.floor(binCount * 0.25);
-    const voiceRange = voiceEnd - voiceStart;
-    return Array.from({ length: BAR_COUNT }, (_, i) => {
-      const segmentStart = voiceStart + Math.floor((i / BAR_COUNT) * voiceRange);
-      const segmentEnd = voiceStart + Math.floor(((i + 1) / BAR_COUNT) * voiceRange);
-      return [segmentStart, segmentEnd] as const;
-    });
-  }, [analyser]);
-
   useEffect(() => {
-    let startTime: number | null = null;
+    const dataArray = analyser ? new Uint8Array(analyser.fftSize) : null;
     lastTimeRef.current = null;
-    const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
 
     const animate = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const elapsed = timestamp - startTime;
       const lastTime = lastTimeRef.current ?? timestamp;
-      const dt = Math.min(64, Math.max(0, timestamp - lastTime));
+      const dt = (timestamp - lastTime) / 1000; // Delta time in seconds
       lastTimeRef.current = timestamp;
-      const smoothingForMs = (ms: number) => 1 - Math.exp(-dt / ms);
-      const audioSmooth = smoothingForMs(AUDIO_SMOOTH_MS);
-      const attack = smoothingForMs(ATTACK_MS);
-      const release = smoothingForMs(RELEASE_MS);
-      const idleSmooth = smoothingForMs(IDLE_SMOOTH_MS);
 
-      if (isRecording && analyser && dataArray && segmentRanges) {
-        // Audio-reactive mode
-        analyser.getByteFrequencyData(dataArray);
-
-        for (let i = 0; i < BAR_COUNT; i++) {
-          const [segmentStart, segmentEnd] = segmentRanges[i];
-          let sum = 0;
-          for (let j = segmentStart; j < segmentEnd; j++) {
-            sum += dataArray[j];
-          }
-
-          const avg = sum / Math.max(1, segmentEnd - segmentStart);
-          const rawLevel = avg / 255;
-          const gated = Math.max(0, rawLevel - NOISE_FLOOR) / (1 - NOISE_FLOOR);
-          const shaped = Math.pow(gated, 0.7);
-
-          smoothedLevels.current[i] += (shaped - smoothedLevels.current[i]) * audioSmooth;
+      // Voice activity detection - simple threshold
+      let isSpeaking = false;
+      if (isRecording && analyser && dataArray) {
+        analyser.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const val = (dataArray[i] - 128) / 128;
+          sum += val * val;
         }
+        const rms = Math.sqrt(sum / dataArray.length);
+        isSpeaking = rms > 0.015; // Simple threshold
+      }
 
-        // Calculate target scales with center-out display mapping
-        for (let i = 0; i < BAR_COUNT; i++) {
-          const level = smoothedLevels.current[i];
-          const response = level > displayLevels.current[i] ? attack : release;
-          displayLevels.current[i] += (level - displayLevels.current[i]) * response;
-        }
+      // Smooth the speaking state (fast on, slower off)
+      const target = isSpeaking ? 1 : 0;
+      const smoothSpeed = isSpeaking ? 12 : 6; // Fast attack, medium release
+      isSpeakingRef.current += (target - isSpeakingRef.current) * Math.min(1, dt * smoothSpeed);
 
-        // Apply to bars using center-out mapping
-        for (let displayIdx = 0; displayIdx < BAR_COUNT; displayIdx++) {
-          const freqIdx = centerOutOrder[displayIdx];
-          const bar = barsRef.current[displayIdx];
-          if (bar) {
-            const scale = MIN_SCALE + displayLevels.current[freqIdx] * (1 - MIN_SCALE);
-            bar.style.transform = `scaleY(${scale}) translateZ(0)`;
-          }
-        }
-      } else {
-        // Idle breathing animation - symmetric from center
-        const phase = (elapsed / 2500) * Math.PI * 2;
+      // Advance phase for wave animation (faster speed)
+      phaseRef.current += dt * 5.5;
 
-        for (let displayIdx = 0; displayIdx < BAR_COUNT; displayIdx++) {
-          const distFromCenter = Math.abs(displayIdx - CENTER);
-          const offset = distFromCenter * 0.3;
-          const wave = Math.sin(phase - offset) * 0.5 + 0.5;
-          const centerFactor = 1 - (distFromCenter / CENTER) * 0.5;
-          const targetLevel = wave * 0.4 * centerFactor;
-          displayLevels.current[displayIdx] += (targetLevel - displayLevels.current[displayIdx]) * idleSmooth;
+      const speakingAmount = isSpeakingRef.current;
+      const time = phaseRef.current;
 
-          const bar = barsRef.current[displayIdx];
-          if (bar) {
-            const scale = MIN_SCALE + displayLevels.current[displayIdx] * (1 - MIN_SCALE);
-            bar.style.transform = `scaleY(${scale}) translateZ(0)`;
-          }
-        }
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const bar = barsRef.current[i];
+        if (!bar) continue;
+
+        // Primary left-to-right wave
+        const waveOffset = (i / BAR_COUNT) * Math.PI * 2;
+        const wave = Math.sin(time - waveOffset);
+
+        // Secondary randomness wave (slower, per-bar offset)
+        const randomWave = Math.sin(time * 0.7 + barRandomOffsets[i]) * 0.25;
+
+        const waveNorm = (wave + 1) * 0.5; // 0 to 1
+
+        // Combine: height curve * (wave + randomness) * speaking amount
+        const height = barHeights[i] * (0.25 + (waveNorm + randomWave) * 0.7) * speakingAmount;
+
+        // Smooth bar transitions
+        displayLevels.current[i] += (height - displayLevels.current[i]) * Math.min(1, dt * 15);
+
+        const scale = MIN_SCALE + displayLevels.current[i] * (1 - MIN_SCALE);
+        bar.style.transform = `scaleY(${scale}) translateZ(0)`;
       }
 
       animationRef.current = requestAnimationFrame(animate);
@@ -132,7 +106,7 @@ export function Waveform({ analyser }: WaveformProps) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [analyser, isRecording, segmentRanges]);
+  }, [analyser, isRecording]);
 
   return (
     <div

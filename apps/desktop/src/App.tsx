@@ -27,7 +27,7 @@ function App() {
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        paddingBottom: '15vh',
+        paddingBottom: '8vh',
       }}
     >
       <VoicePill analyser={analyser} />
