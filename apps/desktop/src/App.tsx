@@ -20,16 +20,7 @@ function App() {
   }
 
   return (
-    <div
-      style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-        paddingBottom: '8vh',
-      }}
-    >
+    <div className="w-screen h-screen flex items-end justify-center pb-[8vh]">
       <VoicePill analyser={analyser} />
     </div>
   );

@@ -5,6 +5,15 @@ interface AudioCaptureOptions {
   onError?: (error: Error) => void;
 }
 
+function floatTo16BitPCM(input: Float32Array): Int16Array {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return output;
+}
+
 export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = {}) {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -12,15 +21,6 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
   const analyserRef = useRef<AnalyserNode | null>(null);
   const isCapturingRef = useRef(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-
-  const floatTo16BitPCM = useCallback((input: Float32Array): Int16Array => {
-    const output = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i++) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-    }
-    return output;
-  }, []);
 
   const start = useCallback(async () => {
     if (isCapturingRef.current) return;
@@ -71,7 +71,7 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
       console.error('[AudioCapture] Failed to start:', error);
       onError?.(error instanceof Error ? error : new Error('Failed to capture audio'));
     }
-  }, [floatTo16BitPCM, onAudioData, onError]);
+  }, [onAudioData, onError]);
 
   const stop = useCallback(() => {
     isCapturingRef.current = false;
@@ -104,5 +104,5 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
     };
   }, [stop]);
 
-  return { start, stop, analyser, isCapturing: isCapturingRef.current };
+  return { start, stop, analyser };
 }

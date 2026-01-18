@@ -6,26 +6,12 @@ interface VoicePillProps {
   analyser: AnalyserNode | null;
 }
 
-/**
- * Main voice recording pill UI.
- * Shows waveform during recording, spinner during processing.
- */
 export function VoicePill({ analyser }: VoicePillProps) {
   const recordingState = useAppStore((state) => state.recordingState);
   const isProcessing = recordingState === 'processing';
 
   return (
-    <div
-      style={{
-        width: 90,
-        height: 28,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 14,
-        background: '#000',
-      }}
-    >
+    <div className="w-[90px] h-7 flex items-center justify-center rounded-full bg-black">
       {isProcessing ? <ProcessingSpinner /> : <Waveform analyser={analyser} />}
     </div>
   );

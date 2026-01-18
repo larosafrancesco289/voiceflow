@@ -11,7 +11,6 @@ interface UseWebSocketOptions {
   onPartial?: (text: string) => void;
   onFinal?: (text: string) => void;
   onError?: (error: string) => void;
-  onReady?: () => void;
 }
 
 export function useWebSocket({
@@ -19,7 +18,6 @@ export function useWebSocket({
   onPartial,
   onFinal,
   onError,
-  onReady,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -27,8 +25,13 @@ export function useWebSocket({
   const [isConnected, setIsConnected] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
+  const safeSend = useCallback((data: string | ArrayBuffer) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(data);
+    }
+  }, []);
+
   const connect = useCallback(() => {
-    // Prevent multiple simultaneous connection attempts
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
     if (isConnectingRef.current) return;
@@ -52,13 +55,11 @@ export function useWebSocket({
           switch (message.type) {
             case 'ready':
               setIsReady(true);
-              onReady?.();
               break;
             case 'partial':
               if (message.text) onPartial?.(message.text);
               break;
             case 'final':
-              // Always call onFinal, even with empty text, to transition out of processing state
               onFinal?.(message.text || '');
               break;
             case 'error':
@@ -90,7 +91,7 @@ export function useWebSocket({
       isConnectingRef.current = false;
       console.error('Failed to connect WebSocket:', error);
     }
-  }, [url, onPartial, onFinal, onError, onReady]);
+  }, [url, onPartial, onFinal, onError]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -108,22 +109,16 @@ export function useWebSocket({
   }, []);
 
   const sendAudio = useCallback((data: Int16Array) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(data.buffer);
-    }
-  }, []);
+    safeSend(data.buffer as ArrayBuffer);
+  }, [safeSend]);
 
   const endStream = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'end' }));
-    }
-  }, []);
+    safeSend(JSON.stringify({ type: 'end' }));
+  }, [safeSend]);
 
   const startStream = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'start' }));
-    }
-  }, []);
+    safeSend(JSON.stringify({ type: 'start' }));
+  }, [safeSend]);
 
   useEffect(() => {
     return () => {

@@ -203,8 +203,6 @@ class AudioBuffer:
         return self.total_samples / self.sample_rate
 
 
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -261,13 +259,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Final transcription
                         audio = audio_buffer.get_audio()
                         logger.info(f"Processing {len(audio)} samples...")
+                        text = ""
                         if len(audio) > 0 and transcriber:
                             text = await transcriber.transcribe(audio)
                             logger.info(f"Transcription: {text}")
-                            await websocket.send_json({"type": "final", "text": text})
                         else:
                             logger.info("No audio or transcriber not available")
-                            await websocket.send_json({"type": "final", "text": ""})
+                        await websocket.send_json({"type": "final", "text": text})
 
                         audio_buffer.clear()
 

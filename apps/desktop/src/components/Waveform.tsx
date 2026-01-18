@@ -12,29 +12,25 @@ const CENTER = Math.floor(BAR_COUNT / 2);
 const barHeights = Array.from({ length: BAR_COUNT }, (_, i) => {
   const distFromCenter = Math.abs(i - CENTER);
   const normalized = distFromCenter / CENTER;
-  return Math.cos(normalized * Math.PI * 0.45); // Smooth bell curve
+  return Math.cos(normalized * Math.PI * 0.45);
 });
 
 // Random offsets for each bar (seeded by position for consistency)
 const barRandomOffsets = Array.from({ length: BAR_COUNT }, (_, i) => {
   const phi = 1.618033988749;
-  return (i * phi) % 1 * Math.PI * 2; // Golden ratio based pseudo-random
+  return (i * phi) % 1 * Math.PI * 2;
 });
 
 interface WaveformProps {
   analyser: AnalyserNode | null;
 }
 
-/**
- * Simple voice-activated waveform.
- * Detects speaking (binary), then plays smooth left-to-right breathing animation.
- */
 export function Waveform({ analyser }: WaveformProps) {
   const recordingState = useAppStore((state) => state.recordingState);
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
   const animationRef = useRef<number | null>(null);
   const displayLevels = useRef<number[]>(new Array(BAR_COUNT).fill(0));
-  const isSpeakingRef = useRef(0); // Smoothed 0-1 value
+  const isSpeakingRef = useRef(0);
   const phaseRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
 
@@ -46,10 +42,10 @@ export function Waveform({ analyser }: WaveformProps) {
 
     const animate = (timestamp: number) => {
       const lastTime = lastTimeRef.current ?? timestamp;
-      const dt = (timestamp - lastTime) / 1000; // Delta time in seconds
+      const dt = (timestamp - lastTime) / 1000;
       lastTimeRef.current = timestamp;
 
-      // Voice activity detection - simple threshold
+      // Voice activity detection
       let isSpeaking = false;
       if (isRecording && analyser && dataArray) {
         analyser.getByteTimeDomainData(dataArray);
@@ -59,19 +55,16 @@ export function Waveform({ analyser }: WaveformProps) {
           sum += val * val;
         }
         const rms = Math.sqrt(sum / dataArray.length);
-        isSpeaking = rms > 0.015; // Simple threshold
+        isSpeaking = rms > 0.015;
       }
 
       // Smooth the speaking state (fast on, slower off)
       const target = isSpeaking ? 1 : 0;
-      const smoothSpeed = isSpeaking ? 12 : 6; // Fast attack, medium release
+      const smoothSpeed = isSpeaking ? 12 : 6;
       isSpeakingRef.current += (target - isSpeakingRef.current) * Math.min(1, dt * smoothSpeed);
 
-      // Advance phase for wave animation (faster speed)
+      // Advance phase for wave animation
       phaseRef.current += dt * 5.5;
-
-      const speakingAmount = isSpeakingRef.current;
-      const time = phaseRef.current;
 
       for (let i = 0; i < BAR_COUNT; i++) {
         const bar = barsRef.current[i];
@@ -79,15 +72,15 @@ export function Waveform({ analyser }: WaveformProps) {
 
         // Primary left-to-right wave
         const waveOffset = (i / BAR_COUNT) * Math.PI * 2;
-        const wave = Math.sin(time - waveOffset);
+        const wave = Math.sin(phaseRef.current - waveOffset);
 
-        // Secondary randomness wave (slower, per-bar offset)
-        const randomWave = Math.sin(time * 0.7 + barRandomOffsets[i]) * 0.25;
+        // Secondary randomness wave
+        const randomWave = Math.sin(phaseRef.current * 0.7 + barRandomOffsets[i]) * 0.25;
 
-        const waveNorm = (wave + 1) * 0.5; // 0 to 1
+        const waveNorm = (wave + 1) * 0.5;
 
         // Combine: height curve * (wave + randomness) * speaking amount
-        const height = barHeights[i] * (0.25 + (waveNorm + randomWave) * 0.7) * speakingAmount;
+        const height = barHeights[i] * (0.25 + (waveNorm + randomWave) * 0.7) * isSpeakingRef.current;
 
         // Smooth bar transitions
         displayLevels.current[i] += (height - displayLevels.current[i]) * Math.min(1, dt * 15);
@@ -109,29 +102,18 @@ export function Waveform({ analyser }: WaveformProps) {
   }, [analyser, isRecording]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        height: MAX_HEIGHT,
-      }}
-    >
+    <div className="flex items-center justify-center gap-0.5" style={{ height: MAX_HEIGHT }}>
       {Array.from({ length: BAR_COUNT }, (_, i) => (
         <div
           key={i}
           ref={(el) => {
             barsRef.current[i] = el;
           }}
+          className="w-0.5 rounded-sm bg-white will-change-transform"
           style={{
-            width: 2,
             height: MAX_HEIGHT,
-            borderRadius: 1,
-            backgroundColor: '#fff',
             transform: `scaleY(${MIN_SCALE}) translateZ(0)`,
             transformOrigin: 'center center',
-            willChange: 'transform',
           }}
         />
       ))}

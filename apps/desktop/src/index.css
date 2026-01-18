@@ -4,22 +4,11 @@
 
 :root {
   --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  --bg-primary: #f5f5f7;
-  --text-primary: rgba(0, 0, 0, 0.85);
-  --text-secondary: rgba(0, 0, 0, 0.45);
-  --text-tertiary: rgba(0, 0, 0, 0.3);
 
   font-family: var(--font-system);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-}
-
-.dark {
-  --bg-primary: #1c1c1e;
-  --text-primary: rgba(255, 255, 255, 0.92);
-  --text-secondary: rgba(255, 255, 255, 0.55);
-  --text-tertiary: rgba(255, 255, 255, 0.35);
 }
 
 /* Transparent backgrounds for main window */

@@ -30,13 +30,16 @@ fn position_bubble(app: &AppHandle) {
     }
 }
 
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        position_bubble(app);
+        let _ = window.show();
+    }
+}
+
 #[tauri::command]
 async fn show_bubble(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        position_bubble(&app);
-        let _ = window.show();
-        // Don't focus - keep focus on the previous app
-    }
+    show_main_window(&app);
 }
 
 #[tauri::command]
@@ -65,13 +68,10 @@ async fn paste_from_clipboard() -> Result<(), String> {
         use std::thread;
         use std::time::Duration;
 
-        // Minimal delay before paste
         thread::sleep(Duration::from_millis(10));
 
-        // Use AppleScript to activate frontmost app and paste
         let script = r#"
             tell application "System Events"
-                set frontApp to name of first application process whose frontmost is true
                 keystroke "v" using command down
             end tell
         "#;
@@ -107,12 +107,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "quit" => app.exit(0),
-            "record" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    position_bubble(app);
-                    let _ = window.show();
-                }
-            }
+            "record" => show_main_window(app),
             "settings" => {
                 if let Some(window) = app.get_webview_window("settings") {
                     let _ = window.show();
@@ -162,10 +157,7 @@ pub fn run() {
                             if !IS_RECORDING.load(Ordering::SeqCst) {
                                 IS_RECORDING.store(true, Ordering::SeqCst);
                                 let _ = app_handle.emit("recording-start", ());
-                                if let Some(window) = app_handle.get_webview_window("main") {
-                                    position_bubble(&app_handle);
-                                    let _ = window.show();
-                                }
+                                show_main_window(&app_handle);
                             }
                         }
                         ShortcutState::Released => {
