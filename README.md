@@ -31,6 +31,10 @@ Language is detected automatically.
 3. **First launch** (unsigned app):
    - Right-click VoiceFlow.app, then click **Open**
    - Click **Open** in the security dialog
+   - **Alternative**: If you see "damaged and can't be opened", run in Terminal:
+     ```bash
+     xattr -cr /Applications/VoiceFlow.app
+     ```
 4. Grant permissions when prompted:
    - **Microphone**: Required for recording
    - **Accessibility**: Required for auto-paste and global hotkey

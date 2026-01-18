@@ -39,7 +39,9 @@ apps/desktop/src-tauri/target/
 # Python
 python/build/
 python/dist/
-*.spec
+
+# Sidecar binaries (built on CI)
+apps/desktop/src-tauri/binaries/
 
 # Bun
 bun.lockb

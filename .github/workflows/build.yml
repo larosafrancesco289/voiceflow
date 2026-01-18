@@ -33,7 +33,10 @@ jobs:
       - name: Install dependencies
         run: |
           bun install
-          cd python && uv sync
+          cd python && uv sync --dev
+
+      - name: Build Python server binary
+        run: ./scripts/build-server.sh
 
       - name: Build Tauri app
         run: bun run build
