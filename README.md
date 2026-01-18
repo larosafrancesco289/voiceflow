@@ -1,88 +1,80 @@
 # VoiceFlow
 
-Local speech-to-text desktop application for macOS. Records audio via a global hotkey, transcribes it offline using parakeet-mlx, and optionally pastes the result into your active application.
+Local, offline speech-to-text for macOS. Hold a hotkey, speak, release.
 
 ## Features
 
-- Global shortcut (Cmd+Shift+Space) to start/stop recording
-- Offline transcription using parakeet-mlx (no data leaves your machine)
-- Auto-paste transcribed text to the active application
-- Minimal UI that stays out of your way
+- **100% Offline**: All transcription happens on your Mac. No data leaves your machine.
+- **25 Languages**: Automatic language detection across European languages.
+- **Fast**: Optimized for Apple Silicon with MLX acceleration.
+- **Private**: No accounts, no cloud, no telemetry.
+- **Auto-Paste**: Transcribed text is automatically pasted into your active application.
 
-## Requirements
+## Supported Languages
 
-- macOS with Apple Silicon (M1/M2/M3)
-- Python 3.10+
-- Bun
-- Rust (for Tauri)
+| | | | | |
+|---|---|---|---|---|
+| Bulgarian | Croatian | Czech | Danish | Dutch |
+| English | Estonian | Finnish | French | German |
+| Greek | Hungarian | Italian | Latvian | Lithuanian |
+| Maltese | Polish | Portuguese | Romanian | Russian |
+| Slovak | Slovenian | Spanish | Swedish | Ukrainian |
 
-## Installation
+Language is detected automatically.
 
-Clone the repository and install dependencies:
+## Download & Install
 
-```bash
-git clone https://github.com/yourusername/voiceflow.git
-cd voiceflow
+### From GitHub Releases
 
-# Install JS dependencies
-bun install
+1. Download the latest `.dmg` from [Releases](https://github.com/larosafrancesco289/voiceflow/releases)
+2. Open the DMG and drag VoiceFlow to Applications
+3. **First launch** (unsigned app):
+   - Right-click VoiceFlow.app, then click **Open**
+   - Click **Open** in the security dialog
+4. Grant permissions when prompted:
+   - **Microphone**: Required for recording
+   - **Accessibility**: Required for auto-paste and global hotkey
 
-# Install Python dependencies
-cd python
-uv sync
-cd ..
-```
-
-The parakeet-mlx model (~600MB) downloads automatically on first run.
+The speech recognition model (~600MB) downloads automatically on first run.
 
 ## Usage
 
-Start both the transcription server and desktop app:
+Hold **Option (⌥) + Space** to record. Release to transcribe and paste.
+
+## Building from Source
+
+Requires macOS with Apple Silicon (M1/M2/M3).
 
 ```bash
+# Clone
+git clone https://github.com/larosafrancesco289/voiceflow.git
+cd voiceflow
+
+# Install dependencies
+bun install
+cd python && uv sync && cd ..
+
+# Run in development
 ./scripts/dev.sh
-```
 
-Or run them separately:
-
-```bash
-# Terminal 1: Python server
-cd python && uv run python -m voiceflow_server.server
-
-# Terminal 2: Tauri app
-bun run dev
-```
-
-Once running, press **Cmd+Shift+Space** to start recording. Press again (or release if using hold-to-record) to stop and transcribe.
-
-## Project Structure
-
-```
-voiceflow/
-├── apps/desktop/           # Tauri desktop app
-│   ├── src/                # React frontend
-│   └── src-tauri/          # Rust backend
-├── python/                 # Transcription server
-│   └── src/voiceflow_server/
-└── scripts/
-    └── dev.sh              # Development launcher
-```
-
-## Building
-
-Create a production build:
-
-```bash
+# Build for production
 bun run build
+# Output: apps/desktop/src-tauri/target/release/bundle/
 ```
-
-The built application will be in `apps/desktop/src-tauri/target/release/bundle/`.
 
 ## Tech Stack
 
-- **Desktop**: Tauri 2, React, TypeScript, Tailwind CSS
+- **Desktop**: Tauri 2, React, TypeScript
 - **Transcription**: Python, FastAPI, parakeet-mlx
-- **State**: Zustand
+- **ML Runtime**: Apple MLX
+
+## Credits
+
+- [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
+- [parakeet-mlx](https://github.com/senstella/parakeet-mlx)
+- [Apple MLX](https://github.com/ml-explore/mlx)
+- [Tauri](https://tauri.app/)
+- [FastAPI](https://fastapi.tiangolo.com/)
 
 ## License
 

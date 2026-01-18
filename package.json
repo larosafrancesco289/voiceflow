@@ -1,6 +1,11 @@
 {
   "name": "voiceflow",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/larosafrancesco289/voiceflow.git"
+  },
+  "homepage": "https://github.com/larosafrancesco289/voiceflow",
   "workspaces": [
     "apps/*",
     "python"
