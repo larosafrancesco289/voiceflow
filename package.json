@@ -7,8 +7,7 @@
   },
   "homepage": "https://github.com/larosafrancesco289/voiceflow",
   "workspaces": [
-    "apps/*",
-    "python"
+    "apps/*"
   ],
   "scripts": {
     "dev": "cd apps/desktop && bun run tauri dev",
