@@ -5,7 +5,7 @@ import { Command, Child } from '@tauri-apps/plugin-shell';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useAppStore } from '../stores/appStore';
 import { useAudioCapture } from './useAudioCapture';
-import { useWebSocket } from './useWebSocket';
+import { useWebSocket, LoadingProgress } from './useWebSocket';
 
 const WS_URL = 'ws://127.0.0.1:8765/ws';
 const HEALTH_URL = 'http://127.0.0.1:8765/health';
@@ -19,7 +19,21 @@ export function useTranscription() {
     addToHistory,
     autoPasteEnabled,
     reset,
+    setModelLoadingState,
   } = useAppStore();
+
+  const handleLoadingProgress = useCallback(
+    (progress: LoadingProgress) => {
+      const isLoading = progress.stage !== 'ready';
+      setModelLoadingState({
+        isLoading,
+        stage: progress.stage,
+        progress: progress.progress,
+        message: progress.message,
+      });
+    },
+    [setModelLoadingState]
+  );
 
   const serverProcessRef = useRef<Child | null>(null);
   const serverStartingRef = useRef(false);
@@ -89,7 +103,7 @@ export function useTranscription() {
     [setCurrentTranscription, setRecordingState, addToHistory, autoPasteEnabled, reset]
   );
 
-  const { connect, sendAudio, startStream, endStream, isConnected, isReady } = useWebSocket({
+  const { connect, sendAudio, startStream, endStream, isConnected, isReady, loadingProgress } = useWebSocket({
     url: WS_URL,
     onPartial: (text) => {
       setPartialTranscription(text);
@@ -100,7 +114,20 @@ export function useTranscription() {
       setRecordingState('idle');
       ensureServerRunning();
     },
+    onLoading: handleLoadingProgress,
   });
+
+  // Update model loading state when ready
+  useEffect(() => {
+    if (isReady) {
+      setModelLoadingState({
+        isLoading: false,
+        stage: 'ready',
+        progress: 1,
+        message: 'Model ready',
+      });
+    }
+  }, [isReady, setModelLoadingState]);
 
   const { start: startCapture, stop: stopCapture, analyser } = useAudioCapture({
     onAudioData: (data) => {
@@ -177,5 +204,6 @@ export function useTranscription() {
     startRecording,
     stopRecording,
     analyser,
+    loadingProgress,
   };
 }

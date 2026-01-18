@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
-import { useAppStore } from '../../stores/appStore';
+import { useAppStore, HotkeyConfig } from '../../stores/appStore';
+import { getModifierDisplay } from '../../utils/modifierSymbols';
 
 type Step = 'welcome' | 'how-to-use' | 'permissions';
 
@@ -55,7 +56,9 @@ function WelcomeStep() {
   );
 }
 
-function HowToUseStep() {
+function HowToUseStep({ hotkey }: { hotkey: HotkeyConfig }) {
+  const modifierDisplays = getModifierDisplay(hotkey.modifiers);
+
   return (
     <div className="flex flex-col items-center text-center">
       <motion.h2
@@ -74,12 +77,17 @@ function HowToUseStep() {
         transition={{ duration: 0.5, delay: 0.2 }}
         className="flex items-center gap-2 mb-6"
       >
+        {modifierDisplays.map((mod, i) => (
+          <span
+            key={i}
+            className="px-4 py-2.5 rounded-lg text-base font-medium bg-white/10 text-white border border-white/10 shadow-lg"
+          >
+            {mod.symbol} {mod.label}
+          </span>
+        ))}
+        {modifierDisplays.length > 0 && <span className="text-white/30 text-lg">+</span>}
         <span className="px-4 py-2.5 rounded-lg text-base font-medium bg-white/10 text-white border border-white/10 shadow-lg">
-          ⌥ Option
-        </span>
-        <span className="text-white/30 text-lg">+</span>
-        <span className="px-4 py-2.5 rounded-lg text-base font-medium bg-white/10 text-white border border-white/10 shadow-lg">
-          Space
+          {hotkey.key}
         </span>
       </motion.div>
 
@@ -241,6 +249,7 @@ function ProgressDots({ currentStep, steps }: { currentStep: number; steps: Step
 export function Onboarding() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const setOnboardingCompleted = useAppStore((state) => state.setOnboardingCompleted);
+  const hotkey = useAppStore((state) => state.hotkey);
   const currentStep = STEPS[currentStepIndex];
 
   // Resize window to onboarding size and show it on mount
@@ -280,7 +289,7 @@ export function Onboarding() {
             className="w-full max-w-sm"
           >
             {currentStep === 'welcome' && <WelcomeStep />}
-            {currentStep === 'how-to-use' && <HowToUseStep />}
+            {currentStep === 'how-to-use' && <HowToUseStep hotkey={hotkey} />}
             {currentStep === 'permissions' && <PermissionsStep onComplete={handleComplete} />}
           </motion.div>
         </AnimatePresence>

@@ -8,7 +8,7 @@ import sys
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 import numpy as np
 import soundfile as sf
@@ -24,6 +24,32 @@ logger = logging.getLogger("voiceflow")
 
 # Global transcriber instance
 transcriber: Optional["Transcriber"] = None
+
+# Connected WebSocket clients for broadcasting loading progress
+connected_clients: Set[WebSocket] = set()
+
+
+async def broadcast_loading_status(stage: str, progress: float, message: str):
+    """Broadcast loading status to all connected clients."""
+    if not connected_clients:
+        return
+
+    payload = {
+        "type": "loading",
+        "stage": stage,
+        "progress": progress,
+        "message": message,
+    }
+
+    disconnected = set()
+    for client in connected_clients:
+        try:
+            await client.send_json(payload)
+        except Exception:
+            disconnected.add(client)
+
+    # Remove disconnected clients
+    connected_clients.difference_update(disconnected)
 
 
 @asynccontextmanager
@@ -54,10 +80,26 @@ class Transcriber:
         self.model = None
         self._loading = False
         self._loaded = asyncio.Event()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self.loading_stage = ""
+        self.loading_progress = 0.0
+        self.loading_message = ""
 
     async def wait_until_ready(self) -> None:
         """Wait until the model is fully loaded and ready for transcription."""
         await self._loaded.wait()
+
+    def _broadcast_sync(self, stage: str, progress: float, message: str):
+        """Broadcast loading status from sync context."""
+        self.loading_stage = stage
+        self.loading_progress = progress
+        self.loading_message = message
+
+        if self._loop and connected_clients:
+            asyncio.run_coroutine_threadsafe(
+                broadcast_loading_status(stage, progress, message),
+                self._loop
+            )
 
     async def load_model(self):
         """Load the parakeet model asynchronously."""
@@ -70,15 +112,20 @@ class Transcriber:
             return
 
         self._loading = True
+        self._loop = asyncio.get_event_loop()
         logger.info("Loading parakeet model...")
+
+        await broadcast_loading_status("downloading", 0.0, "Checking model cache...")
 
         try:
             # Import and load in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
             self.model = await loop.run_in_executor(None, self._load_model_sync)
+            await broadcast_loading_status("ready", 1.0, "Model ready")
             logger.info("Parakeet model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
+            await broadcast_loading_status("error", 0.0, f"Failed to load model: {e}")
             self.model = None
         finally:
             self._loading = False
@@ -90,6 +137,7 @@ class Transcriber:
         Creates 0.5s of silent audio and runs inference to warm up the model's
         computational graph. This prevents missing initial words on first use.
         """
+        self._broadcast_sync("warmup", 0.9, "Warming up model...")
         logger.info("Warming up model...")
         try:
             # Create 0.5 seconds of silent audio at 16kHz
@@ -119,9 +167,31 @@ class Transcriber:
         try:
             from parakeet_mlx import from_pretrained
 
+            # Check if model is cached by looking for cache directory
+            self._broadcast_sync("downloading", 0.1, "Checking model cache...")
+
+            # Try to set up progress callback for huggingface_hub downloads
+            try:
+                from huggingface_hub import snapshot_download
+                from huggingface_hub.utils import are_progress_bars_disabled
+
+                # Check if model is already cached
+                cache_path = Path.home() / ".cache" / "huggingface" / "hub"
+                model_cache = cache_path / "models--mlx-community--parakeet-tdt-0.6b-v3"
+
+                if model_cache.exists():
+                    self._broadcast_sync("loading", 0.3, "Loading model from cache...")
+                else:
+                    self._broadcast_sync("downloading", 0.1, "Downloading model (~600MB)...")
+                    # Note: Progress updates during actual download handled by tqdm
+                    # which huggingface_hub uses internally
+            except ImportError:
+                pass
+
             # Load the MLX-converted parakeet model from mlx-community
             # First run will download ~600MB from Hugging Face
             logger.info("Loading mlx-community/parakeet-tdt-0.6b-v3 (downloads ~600MB on first run)...")
+            self._broadcast_sync("loading", 0.5, "Loading model into memory...")
             model = from_pretrained("mlx-community/parakeet-tdt-0.6b-v3")
 
             # Warmup the model to avoid cold start latency
@@ -130,10 +200,11 @@ class Transcriber:
             return model
         except ImportError:
             logger.warning("parakeet-mlx not available, using mock transcription")
+            self._broadcast_sync("loading", 0.5, "Using mock transcription (parakeet-mlx not installed)")
             return None
         except Exception as e:
             logger.error(f"Error loading parakeet model: {e}")
-            return None
+            raise
 
     async def transcribe(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
         """Transcribe audio data to text."""
@@ -218,12 +289,24 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established")
 
+    # Track this client for loading broadcasts
+    connected_clients.add(websocket)
+
     audio_buffer = AudioBuffer()
     is_recording = False
 
     try:
-        # Send ready signal once model is loaded
+        # Send current loading status if model is still loading
         if transcriber:
+            if transcriber._loading:
+                # Send current loading state to newly connected client
+                await websocket.send_json({
+                    "type": "loading",
+                    "stage": transcriber.loading_stage or "loading",
+                    "progress": transcriber.loading_progress,
+                    "message": transcriber.loading_message or "Loading model...",
+                })
+            # Wait for model to be ready
             await transcriber.wait_until_ready()
         await websocket.send_json({"type": "ready"})
 
@@ -280,6 +363,9 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"type": "error", "error": str(e)})
         except Exception as send_error:
             logger.debug(f"Failed to send error to client: {send_error}")
+    finally:
+        # Remove from connected clients
+        connected_clients.discard(websocket)
 
 
 def main():

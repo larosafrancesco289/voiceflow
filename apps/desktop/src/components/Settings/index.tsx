@@ -1,34 +1,7 @@
 import { motion } from 'framer-motion';
 import { useAppStore } from '../../stores/appStore';
-
-function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!enabled)}
-      className="relative w-10 h-6 rounded-full transition-all duration-200"
-      style={{ background: enabled ? '#22c55e' : 'rgba(255, 255, 255, 0.1)' }}
-    >
-      <motion.div
-        className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white"
-        animate={{ x: enabled ? 16 : 0 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-      />
-    </button>
-  );
-}
-
-function ShortcutBadge() {
-  return (
-    <div className="flex items-center gap-1">
-      <span className="px-2 py-1 rounded text-xs font-medium bg-white/10 text-white/90">
-        ⌥
-      </span>
-      <span className="px-2 py-1 rounded text-xs font-medium bg-white/10 text-white/90">
-        Space
-      </span>
-    </div>
-  );
-}
+import { HotkeyPicker } from '../HotkeyPicker';
+import { Toggle } from '../Toggle';
 
 function SettingRow({
   label,
@@ -80,10 +53,10 @@ export function Settings() {
       <div className="space-y-1">
         <SettingRow
           label="Hold to record"
-          description="Press and hold, release to transcribe"
+          description="Click to change shortcut"
           delay={0.05}
         >
-          <ShortcutBadge />
+          <HotkeyPicker />
         </SettingRow>
 
         <SettingRow

@@ -1,9 +1,18 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
 
+export interface LoadingProgress {
+  stage: 'downloading' | 'loading' | 'warmup' | 'ready' | 'error';
+  progress: number;
+  message: string;
+}
+
 interface WebSocketMessage {
-  type: 'partial' | 'final' | 'error' | 'ready';
+  type: 'partial' | 'final' | 'error' | 'ready' | 'loading';
   text?: string;
   error?: string;
+  stage?: string;
+  progress?: number;
+  message?: string;
 }
 
 interface UseWebSocketOptions {
@@ -11,6 +20,7 @@ interface UseWebSocketOptions {
   onPartial?: (text: string) => void;
   onFinal?: (text: string) => void;
   onError?: (error: string) => void;
+  onLoading?: (progress: LoadingProgress) => void;
 }
 
 export function useWebSocket({
@@ -18,12 +28,14 @@ export function useWebSocket({
   onPartial,
   onFinal,
   onError,
+  onLoading,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectingRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
 
   const safeSend = useCallback((data: string | ArrayBuffer) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -55,7 +67,18 @@ export function useWebSocket({
           switch (message.type) {
             case 'ready':
               setIsReady(true);
+              setLoadingProgress(null);
               break;
+            case 'loading': {
+              const progress: LoadingProgress = {
+                stage: (message.stage as LoadingProgress['stage']) || 'loading',
+                progress: message.progress || 0,
+                message: message.message || 'Loading...',
+              };
+              setLoadingProgress(progress);
+              onLoading?.(progress);
+              break;
+            }
             case 'partial':
               if (message.text) onPartial?.(message.text);
               break;
@@ -91,7 +114,7 @@ export function useWebSocket({
       isConnectingRef.current = false;
       console.error('Failed to connect WebSocket:', error);
     }
-  }, [url, onPartial, onFinal, onError]);
+  }, [url, onPartial, onFinal, onError, onLoading]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -134,5 +157,6 @@ export function useWebSocket({
     endStream,
     isConnected,
     isReady,
+    loadingProgress,
   };
 }

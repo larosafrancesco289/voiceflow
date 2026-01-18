@@ -1,13 +1,14 @@
-import { Onboarding, Settings, VoicePill } from './components';
+import { Onboarding, Settings, VoicePill, MainApp } from './components';
 import { useTranscription } from './hooks/useTranscription';
 import { useAppStore } from './stores/appStore';
 
 function App() {
   const { analyser } = useTranscription();
   const onboardingCompleted = useAppStore((state) => state.onboardingCompleted);
-  const isSettingsPage = window.location.pathname === '/settings';
+  const pathname = window.location.pathname;
 
-  if (isSettingsPage) {
+  // Route: /settings
+  if (pathname === '/settings') {
     return (
       <div className="settings-page min-h-screen">
         <Settings />
@@ -15,6 +16,12 @@ function App() {
     );
   }
 
+  // Route: /main (main app window)
+  if (pathname === '/main') {
+    return <MainApp />;
+  }
+
+  // Default route: VoicePill (bubble window)
   if (!onboardingCompleted) {
     return <Onboarding />;
   }
