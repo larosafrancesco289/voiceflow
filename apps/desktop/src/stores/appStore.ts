@@ -8,12 +8,14 @@ interface AppState {
   currentTranscription: string;
   partialTranscription: string;
   autoPasteEnabled: boolean;
+  onboardingCompleted: boolean;
   history: Array<{ text: string; timestamp: number }>;
 
   setRecordingState: (state: RecordingState) => void;
   setCurrentTranscription: (text: string) => void;
   setPartialTranscription: (text: string) => void;
   setAutoPasteEnabled: (enabled: boolean) => void;
+  setOnboardingCompleted: (completed: boolean) => void;
   addToHistory: (text: string) => void;
   clearHistory: () => void;
   reset: () => void;
@@ -26,12 +28,14 @@ export const useAppStore = create<AppState>()(
       currentTranscription: '',
       partialTranscription: '',
       autoPasteEnabled: true,
+      onboardingCompleted: false,
       history: [],
 
       setRecordingState: (state) => set({ recordingState: state }),
       setCurrentTranscription: (text) => set({ currentTranscription: text }),
       setPartialTranscription: (text) => set({ partialTranscription: text }),
       setAutoPasteEnabled: (enabled) => set({ autoPasteEnabled: enabled }),
+      setOnboardingCompleted: (completed) => set({ onboardingCompleted: completed }),
       addToHistory: (text) =>
         set((state) => ({
           history: [
@@ -51,6 +55,7 @@ export const useAppStore = create<AppState>()(
       name: 'voiceflow-storage',
       partialize: (state) => ({
         autoPasteEnabled: state.autoPasteEnabled,
+        onboardingCompleted: state.onboardingCompleted,
         history: state.history,
       }),
     }

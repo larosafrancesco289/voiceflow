@@ -47,6 +47,17 @@ async fn hide_bubble(app: AppHandle) {
 }
 
 #[tauri::command]
+async fn resize_main_window(app: AppHandle, width: f64, height: f64, centered: bool) {
+    if let Some(window) = app.get_webview_window("main") {
+        use tauri::LogicalSize;
+        let _ = window.set_size(LogicalSize::new(width, height));
+        if centered {
+            let _ = window.center();
+        }
+    }
+}
+
+#[tauri::command]
 async fn paste_from_clipboard() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -114,9 +125,11 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 .title("VoiceFlow Settings")
                 .inner_size(400.0, 500.0)
                 .resizable(false)
+                .always_on_top(true)
                 .build()
                 {
                     let _ = window.show();
+                    let _ = window.set_focus();
                 }
             }
             _ => {}
@@ -176,6 +189,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             show_bubble,
             hide_bubble,
+            resize_main_window,
             paste_from_clipboard,
         ])
         .run(tauri::generate_context!())
