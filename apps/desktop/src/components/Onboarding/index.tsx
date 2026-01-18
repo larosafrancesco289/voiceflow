@@ -1,29 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore, HotkeyConfig } from '../../stores/appStore';
 import { getModifierDisplay } from '../../utils/modifierSymbols';
+import { ModelLoading } from '../ModelLoading';
 
-type Step = 'welcome' | 'how-to-use' | 'permissions';
+type Step = 'welcome' | 'how-to-use' | 'permissions' | 'model-setup';
 
-const STEPS: Step[] = ['welcome', 'how-to-use', 'permissions'];
+const STEPS: Step[] = ['welcome', 'how-to-use', 'permissions', 'model-setup'];
 
-function WelcomeStep() {
+const FADE_IN_Y = { initial: { y: 20, opacity: 0 }, animate: { y: 0, opacity: 1 } };
+const FADE_IN_SCALE = { initial: { scale: 0.8, opacity: 0 }, animate: { scale: 1, opacity: 1 } };
+
+function WelcomeStep(): React.ReactNode {
   return (
     <div className="flex flex-col items-center text-center">
-      {/* App icon */}
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        {...FADE_IN_SCALE}
         transition={{ duration: 0.5, delay: 0.1 }}
         className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-6 shadow-lg shadow-violet-500/25"
       >
-        <svg
-          className="w-10 h-10 text-white"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -34,8 +31,7 @@ function WelcomeStep() {
       </motion.div>
 
       <motion.h1
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.2 }}
         className="text-2xl font-semibold text-white tracking-tight mb-2"
       >
@@ -43,8 +39,7 @@ function WelcomeStep() {
       </motion.h1>
 
       <motion.p
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.3 }}
         className="text-white/50 text-sm leading-relaxed max-w-[260px]"
       >
@@ -56,24 +51,31 @@ function WelcomeStep() {
   );
 }
 
-function HowToUseStep({ hotkey }: { hotkey: HotkeyConfig }) {
+interface HowToUseStepProps {
+  hotkey: HotkeyConfig;
+}
+
+const INSTRUCTIONS = [
+  { action: 'Hold', description: 'the shortcut to start recording' },
+  { action: 'Speak', description: 'naturally into your microphone' },
+  { action: 'Release', description: 'to transcribe and auto-paste' },
+];
+
+function HowToUseStep({ hotkey }: HowToUseStepProps): React.ReactNode {
   const modifierDisplays = getModifierDisplay(hotkey.modifiers);
 
   return (
     <div className="flex flex-col items-center text-center">
       <motion.h2
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.1 }}
         className="text-xl font-semibold text-white tracking-tight mb-6"
       >
         How to Use
       </motion.h2>
 
-      {/* Keyboard shortcut demonstration */}
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.2 }}
         className="flex items-center gap-2 mb-6"
       >
@@ -91,46 +93,34 @@ function HowToUseStep({ hotkey }: { hotkey: HotkeyConfig }) {
         </span>
       </motion.div>
 
-      {/* Instructions */}
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.3 }}
         className="space-y-3 text-left w-full max-w-[280px]"
       >
-        <div className="flex items-start gap-3">
-          <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span className="text-xs font-medium text-violet-400">1</span>
+        {INSTRUCTIONS.map((item, index) => (
+          <div key={index} className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-xs font-medium text-violet-400">{index + 1}</span>
+            </div>
+            <p className="text-sm text-white/70">
+              <span className="text-white/90 font-medium">{item.action}</span> {item.description}
+            </p>
           </div>
-          <p className="text-sm text-white/70">
-            <span className="text-white/90 font-medium">Hold</span> the shortcut to start recording
-          </p>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span className="text-xs font-medium text-violet-400">2</span>
-          </div>
-          <p className="text-sm text-white/70">
-            <span className="text-white/90 font-medium">Speak</span> naturally into your microphone
-          </p>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span className="text-xs font-medium text-violet-400">3</span>
-          </div>
-          <p className="text-sm text-white/70">
-            <span className="text-white/90 font-medium">Release</span> to transcribe and auto-paste
-          </p>
-        </div>
+        ))}
       </motion.div>
     </div>
   );
 }
 
-function PermissionsStep({ onComplete }: { onComplete: () => void }) {
+interface PermissionsStepProps {
+  onContinue: () => void;
+}
+
+function PermissionsStep({ onContinue }: PermissionsStepProps): React.ReactNode {
   const [micGranted, setMicGranted] = useState<boolean | null>(null);
 
-  const requestMicrophone = async () => {
+  const requestMicrophone = async (): Promise<void> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
@@ -143,8 +133,7 @@ function PermissionsStep({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="flex flex-col items-center text-center">
       <motion.h2
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.1 }}
         className="text-xl font-semibold text-white tracking-tight mb-2"
       >
@@ -152,18 +141,15 @@ function PermissionsStep({ onComplete }: { onComplete: () => void }) {
       </motion.h2>
 
       <motion.p
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.2 }}
         className="text-white/50 text-sm mb-6 max-w-[260px]"
       >
         VoiceFlow needs microphone access to transcribe your speech.
       </motion.p>
 
-      {/* Permission status */}
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.3 }}
         className="w-full max-w-[280px] mb-6"
       >
@@ -195,10 +181,8 @@ function PermissionsStep({ onComplete }: { onComplete: () => void }) {
         )}
       </motion.div>
 
-      {/* Privacy note */}
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        {...FADE_IN_Y}
         transition={{ duration: 0.5, delay: 0.4 }}
         className="flex items-start gap-2.5 p-3 rounded-xl bg-white/5 max-w-[280px]"
       >
@@ -211,14 +195,81 @@ function PermissionsStep({ onComplete }: { onComplete: () => void }) {
         </p>
       </motion.div>
 
-      {/* Get started button */}
       {micGranted !== null && (
         <motion.button
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
+          {...FADE_IN_Y}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          onClick={onContinue}
+          className="mt-6 py-2.5 px-8 rounded-full bg-white text-black font-medium text-sm hover:bg-white/90 transition-colors"
+        >
+          Continue
+        </motion.button>
+      )}
+    </div>
+  );
+}
+
+interface ModelSetupStepProps {
+  isReady: boolean;
+  onStartServer: () => void;
+  onComplete: () => void;
+}
+
+function ModelSetupStep({ isReady, onStartServer, onComplete }: ModelSetupStepProps): React.ReactNode {
+  const hasStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (hasStartedRef.current) return;
+    hasStartedRef.current = true;
+    onStartServer();
+  }, [onStartServer]);
+
+  const title = isReady ? 'Ready to Go' : 'Setting Up';
+  const description = isReady
+    ? 'The speech recognition model is loaded and ready.'
+    : 'Preparing the speech recognition model for first use.';
+
+  return (
+    <div className="flex flex-col items-center text-center">
+      <motion.h2
+        {...FADE_IN_Y}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="text-xl font-semibold text-white tracking-tight mb-2"
+      >
+        {title}
+      </motion.h2>
+
+      <motion.p
+        {...FADE_IN_Y}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="text-white/50 text-sm mb-6 max-w-[260px]"
+      >
+        {description}
+      </motion.p>
+
+      <motion.div
+        {...FADE_IN_Y}
+        transition={{ duration: 0.5, delay: 0.3 }}
+        className="w-full max-w-[280px] mb-6"
+      >
+        {isReady ? (
+          <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+            <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm font-medium text-emerald-400">Model ready</span>
+          </div>
+        ) : (
+          <ModelLoading variant="full" />
+        )}
+      </motion.div>
+
+      {isReady && (
+        <motion.button
+          {...FADE_IN_Y}
           transition={{ duration: 0.3, delay: 0.2 }}
           onClick={onComplete}
-          className="mt-6 py-2.5 px-8 rounded-full bg-white text-black font-medium text-sm hover:bg-white/90 transition-colors"
+          className="py-2.5 px-8 rounded-full bg-white text-black font-medium text-sm hover:bg-white/90 transition-colors"
         >
           Get Started
         </motion.button>
@@ -227,10 +278,15 @@ function PermissionsStep({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function ProgressDots({ currentStep, steps }: { currentStep: number; steps: Step[] }) {
+interface ProgressDotsProps {
+  currentStep: number;
+  totalSteps: number;
+}
+
+function ProgressDots({ currentStep, totalSteps }: ProgressDotsProps): React.ReactNode {
   return (
     <div className="flex gap-2">
-      {steps.map((_, index) => (
+      {Array.from({ length: totalSteps }, (_, index) => (
         <motion.div
           key={index}
           className="h-1.5 rounded-full"
@@ -246,38 +302,61 @@ function ProgressDots({ currentStep, steps }: { currentStep: number; steps: Step
   );
 }
 
-export function Onboarding() {
+interface OnboardingProps {
+  isReady: boolean;
+  onStartServer: () => void;
+}
+
+export function Onboarding({ isReady, onStartServer }: OnboardingProps): React.ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const setOnboardingCompleted = useAppStore((state) => state.setOnboardingCompleted);
   const hotkey = useAppStore((state) => state.hotkey);
   const currentStep = STEPS[currentStepIndex];
 
-  // Resize window to onboarding size and show it on mount
   useEffect(() => {
-    const setupWindow = async () => {
+    const setupWindow = async (): Promise<void> => {
       await invoke('resize_main_window', { width: 400, height: 500, centered: true });
       await invoke('show_bubble');
     };
     setupWindow();
   }, []);
 
-  const handleNext = () => {
+  const handleNext = (): void => {
     if (currentStepIndex < STEPS.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1);
     }
   };
 
-  const handleComplete = async () => {
-    // Resize back to bubble size
+  const handleComplete = async (): Promise<void> => {
     await invoke('resize_main_window', { width: 90, height: 36, centered: false });
+    await invoke('hide_bubble');
+    await invoke('show_main_app');
     setOnboardingCompleted(true);
   };
 
-  const isLastStep = currentStepIndex === STEPS.length - 1;
+  const showContinueButton = currentStep === 'welcome' || currentStep === 'how-to-use';
+
+  function renderStepContent(): React.ReactNode {
+    switch (currentStep) {
+      case 'welcome':
+        return <WelcomeStep />;
+      case 'how-to-use':
+        return <HowToUseStep hotkey={hotkey} />;
+      case 'permissions':
+        return <PermissionsStep onContinue={handleNext} />;
+      case 'model-setup':
+        return (
+          <ModelSetupStep
+            isReady={isReady}
+            onStartServer={onStartServer}
+            onComplete={handleComplete}
+          />
+        );
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center p-8 font-sans">
-      {/* Content area */}
       <div className="flex-1 flex items-center justify-center w-full">
         <AnimatePresence mode="wait">
           <motion.div
@@ -288,18 +367,15 @@ export function Onboarding() {
             transition={{ duration: 0.3 }}
             className="w-full max-w-sm"
           >
-            {currentStep === 'welcome' && <WelcomeStep />}
-            {currentStep === 'how-to-use' && <HowToUseStep hotkey={hotkey} />}
-            {currentStep === 'permissions' && <PermissionsStep onComplete={handleComplete} />}
+            {renderStepContent()}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Navigation */}
       <div className="flex flex-col items-center gap-6">
-        <ProgressDots currentStep={currentStepIndex} steps={STEPS} />
+        <ProgressDots currentStep={currentStepIndex} totalSteps={STEPS.length} />
 
-        {!isLastStep && (
+        {showContinueButton && (
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

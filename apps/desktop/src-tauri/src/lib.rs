@@ -170,10 +170,18 @@ fn position_bubble(app: &AppHandle) {
     }
 }
 
+/// Focus a window and bring it to front using always-on-top toggle trick
+fn focus_and_bring_to_front(window: &tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = window.set_always_on_top(true);
+    let _ = window.set_always_on_top(false);
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         position_bubble(app);
-        let _ = window.show();
+        focus_and_bring_to_front(&window);
     }
 }
 
@@ -287,25 +295,19 @@ fn update_tray_menu_text(_app: &AppHandle, _config: &ShortcutConfig) {}
 
 fn show_or_create_main_app(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main-app") {
-        let _ = window.show();
-        let _ = window.set_focus();
-        // Bring to front
-        let _ = window.set_always_on_top(true);
-        let _ = window.set_always_on_top(false);
-    } else if let Ok(window) = WebviewWindowBuilder::new(
-        app,
-        "main-app",
-        WebviewUrl::App("/main".into()),
-    )
-    .title("VoiceFlow")
-    .inner_size(400.0, 520.0)
-    .resizable(false)
-    .center()
-    .focused(true)
-    .build()
-    {
-        let _ = window.show();
-        let _ = window.set_focus();
+        focus_and_bring_to_front(&window);
+        return;
+    }
+
+    let builder = WebviewWindowBuilder::new(app, "main-app", WebviewUrl::App("/main".into()))
+        .title("VoiceFlow")
+        .inner_size(400.0, 520.0)
+        .resizable(false)
+        .center()
+        .focused(true);
+
+    if let Ok(window) = builder.build() {
+        focus_and_bring_to_front(&window);
     }
 }
 

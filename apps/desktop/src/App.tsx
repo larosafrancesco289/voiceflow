@@ -3,8 +3,10 @@ import { useTranscription } from './hooks/useTranscription';
 import { useAppStore } from './stores/appStore';
 
 function App() {
-  const { analyser } = useTranscription();
   const onboardingCompleted = useAppStore((state) => state.onboardingCompleted);
+  const { analyser, isReady, startServer } = useTranscription({
+    autoStart: onboardingCompleted,
+  });
   const pathname = window.location.pathname;
 
   // Route: /settings
@@ -23,7 +25,7 @@ function App() {
 
   // Default route: VoicePill (bubble window)
   if (!onboardingCompleted) {
-    return <Onboarding />;
+    return <Onboarding isReady={isReady} onStartServer={startServer} />;
   }
 
   return (

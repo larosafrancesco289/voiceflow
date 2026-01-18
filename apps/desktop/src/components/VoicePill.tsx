@@ -1,13 +1,14 @@
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/appStore';
+import { ModelLoading } from './ModelLoading';
 import { ProcessingSpinner } from './ProcessingSpinner';
 import { Waveform } from './Waveform';
-import { ModelLoading } from './ModelLoading';
 
 interface VoicePillProps {
   analyser: AnalyserNode | null;
 }
 
-function PillContent({ analyser }: { analyser: AnalyserNode | null }): React.ReactNode {
+function PillContent({ analyser }: VoicePillProps): React.ReactNode {
   const recordingState = useAppStore((state) => state.recordingState);
   const modelLoadingState = useAppStore((state) => state.modelLoadingState);
 
@@ -22,9 +23,16 @@ function PillContent({ analyser }: { analyser: AnalyserNode | null }): React.Rea
   return <Waveform analyser={analyser} />;
 }
 
-export function VoicePill({ analyser }: VoicePillProps) {
+export function VoicePill({ analyser }: VoicePillProps): React.ReactNode {
+  const handleClick = (): void => {
+    invoke('show_main_app');
+  };
+
   return (
-    <div className="w-[90px] h-7 flex items-center justify-center rounded-full bg-black">
+    <div
+      className="w-[90px] h-7 flex items-center justify-center rounded-full bg-black cursor-pointer"
+      onClick={handleClick}
+    >
       <PillContent analyser={analyser} />
     </div>
   );

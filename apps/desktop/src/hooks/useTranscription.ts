@@ -10,7 +10,11 @@ import { useWebSocket, LoadingProgress } from './useWebSocket';
 const WS_URL = 'ws://127.0.0.1:8765/ws';
 const HEALTH_URL = 'http://127.0.0.1:8765/health';
 
-export function useTranscription() {
+interface UseTranscriptionOptions {
+  autoStart?: boolean;
+}
+
+export function useTranscription({ autoStart = true }: UseTranscriptionOptions = {}) {
   const {
     recordingState,
     setRecordingState,
@@ -179,10 +183,18 @@ export function useTranscription() {
   startRecordingRef.current = startRecording;
   stopRecordingRef.current = stopRecording;
 
-  // One-time setup: connect to server and register event listeners
-  useEffect(() => {
+  // Exposed function to manually start the server (for onboarding flow)
+  const startServer = useCallback(() => {
     ensureServerRunning();
     connect();
+  }, [ensureServerRunning, connect]);
+
+  // One-time setup: connect to server and register event listeners
+  useEffect(() => {
+    if (autoStart) {
+      ensureServerRunning();
+      connect();
+    }
 
     const unlistenStart = listen('recording-start', () => {
       startRecordingRef.current();
@@ -203,6 +215,7 @@ export function useTranscription() {
     isReady,
     startRecording,
     stopRecording,
+    startServer,
     analyser,
     loadingProgress,
   };
