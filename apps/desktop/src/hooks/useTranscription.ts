@@ -121,6 +121,16 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     onLoading: handleLoadingProgress,
   });
 
+  const { start: startCapture, stop: stopCapture, analyser } = useAudioCapture({
+    onAudioData: (data) => {
+      sendAudio(data);
+    },
+    onError: (error) => {
+      console.error('[Transcription] Audio capture error:', error);
+      setRecordingState('idle');
+    },
+  });
+
   // Update model loading state when ready
   useEffect(() => {
     if (isReady) {
@@ -132,16 +142,6 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
       });
     }
   }, [isReady, setModelLoadingState]);
-
-  const { start: startCapture, stop: stopCapture, analyser } = useAudioCapture({
-    onAudioData: (data) => {
-      sendAudio(data);
-    },
-    onError: (error) => {
-      console.error('[Transcription] Audio capture error:', error);
-      setRecordingState('idle');
-    },
-  });
 
   const startRecording = useCallback(async () => {
     if (recordingState !== 'idle') return;
