@@ -22,32 +22,14 @@ Local, offline speech-to-text for macOS. Hold a hotkey, speak, release.
 
 Language is detected automatically.
 
-## Download & Install
+## Requirements
 
-### From GitHub Releases
+- macOS with Apple Silicon (M1/M2/M3/M4)
+- [Bun](https://bun.sh/) - `curl -fsSL https://bun.sh/install | bash`
+- [uv](https://docs.astral.sh/uv/) - `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- [Rust](https://rustup.rs/) - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 
-1. Download the latest `.dmg` from [Releases](https://github.com/larosafrancesco289/voiceflow/releases)
-2. Open the DMG and drag VoiceFlow to Applications
-3. **First launch** (unsigned app):
-   - Right-click VoiceFlow.app, then click **Open**
-   - Click **Open** in the security dialog
-   - **Alternative**: If you see "damaged and can't be opened", run in Terminal:
-     ```bash
-     xattr -cr /Applications/VoiceFlow.app
-     ```
-4. Grant permissions when prompted:
-   - **Microphone**: Required for recording
-   - **Accessibility**: Required for auto-paste and global hotkey
-
-The speech recognition model (~600MB) downloads automatically on first run.
-
-## Usage
-
-Hold **Option (⌥) + Space** to record. Release to transcribe and paste.
-
-## Building from Source
-
-Requires macOS with Apple Silicon (M1/M2/M3).
+## Installation
 
 ```bash
 # Clone
@@ -57,14 +39,31 @@ cd voiceflow
 # Install dependencies
 bun install
 cd python && uv sync && cd ..
-
-# Run in development
-./scripts/dev.sh
-
-# Build for production
-bun run build
-# Output: apps/desktop/src-tauri/target/release/bundle/
 ```
+
+## Running
+
+```bash
+./scripts/dev.sh
+```
+
+This starts both the Python transcription server and the Tauri app. The speech recognition model (~600MB) downloads automatically on first run.
+
+Grant permissions when prompted:
+- **Microphone**: Required for recording
+- **Accessibility**: Required for auto-paste and global hotkey
+
+### Quick Alias
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+alias voiceflow="cd ~/path/to/voiceflow && ./scripts/dev.sh"
+```
+
+## Usage
+
+Hold **Option (⌥) + Space** to record. Release to transcribe and paste.
 
 ## Tech Stack
 
