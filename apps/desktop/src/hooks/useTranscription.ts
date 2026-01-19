@@ -28,9 +28,8 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
 
   const handleLoadingProgress = useCallback(
     (progress: LoadingProgress) => {
-      const isLoading = progress.stage !== 'ready';
       setModelLoadingState({
-        isLoading,
+        isLoading: progress.stage !== 'ready',
         stage: progress.stage,
         progress: progress.progress,
         message: progress.message,
@@ -75,7 +74,6 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
 
   const handleFinalTranscription = useCallback(
     async (text: string) => {
-      // If no transcription, just reset and hide immediately
       if (!text.trim()) {
         reset();
         invoke('hide_bubble');
@@ -98,7 +96,6 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
         }
       }
 
-      // Hide after showing the result briefly (only if not auto-pasting)
       setTimeout(() => {
         reset();
         invoke('hide_bubble');
@@ -109,9 +106,7 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
 
   const { connect, sendAudio, startStream, endStream, isConnected, isReady, loadingProgress } = useWebSocket({
     url: WS_URL,
-    onPartial: (text) => {
-      setPartialTranscription(text);
-    },
+    onPartial: setPartialTranscription,
     onFinal: handleFinalTranscription,
     onError: (error) => {
       console.error('[Transcription] WebSocket error:', error);
@@ -122,16 +117,13 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
   });
 
   const { start: startCapture, stop: stopCapture, analyser } = useAudioCapture({
-    onAudioData: (data) => {
-      sendAudio(data);
-    },
+    onAudioData: sendAudio,
     onError: (error) => {
       console.error('[Transcription] Audio capture error:', error);
       setRecordingState('idle');
     },
   });
 
-  // Update model loading state when ready
   useEffect(() => {
     if (isReady) {
       setModelLoadingState({
@@ -183,13 +175,11 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
   startRecordingRef.current = startRecording;
   stopRecordingRef.current = stopRecording;
 
-  // Exposed function to manually start the server (for onboarding flow)
   const startServer = useCallback(() => {
     ensureServerRunning();
     connect();
   }, [ensureServerRunning, connect]);
 
-  // One-time setup: connect to server and register event listeners
   useEffect(() => {
     if (autoStart) {
       ensureServerRunning();

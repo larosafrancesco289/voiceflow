@@ -18,42 +18,33 @@ use tauri_nspanel::objc2::{runtime::NSObjectProtocol, ClassType, Message};
 
 static IS_RECORDING: AtomicBool = AtomicBool::new(false);
 
-// Define a custom panel type for the overlay bubble.
-// This panel can appear over fullscreen applications.
+// NSPanel that floats over fullscreen apps without stealing focus
 #[cfg(target_os = "macos")]
 tauri_nspanel::panel!(FloatingBubblePanel {
     config: {
-        // Panel should not become key window (won't steal focus)
         can_become_key_window: false,
-        // Panel should not become main window
         can_become_main_window: false,
-        // This is a floating panel
         is_floating_panel: true,
     }
 });
 
-/// Convert a window to an NSPanel that can appear over fullscreen apps.
-/// This is macOS-specific and required for overlay functionality since Big Sur.
+/// Convert a window to an NSPanel that can appear over fullscreen apps
 #[cfg(target_os = "macos")]
 fn setup_macos_panel(window: &tauri::WebviewWindow) {
     use tauri_nspanel::objc2_app_kit::{NSWindowCollectionBehavior, NSWindowStyleMask};
 
-    // Convert the Tauri window to an NSPanel
-    if let Ok(panel) = window.to_panel::<FloatingBubblePanel<_>>() {
-        // Window level: higher than most windows, including fullscreen apps
-        // NSMainMenuWindowLevel (24) + 1 = 25, which floats above fullscreen
-        panel.set_level(25);
+    let Ok(panel) = window.to_panel::<FloatingBubblePanel<_>>() else {
+        return;
+    };
 
-        // Style mask: panel won't steal focus and is resizable
-        let style_mask = NSWindowStyleMask::NonactivatingPanel | NSWindowStyleMask::Resizable;
-        panel.set_style_mask(style_mask);
-
-        // Collection behavior: visible on all spaces, stays in place, can appear over fullscreen
-        let collection_behavior = NSWindowCollectionBehavior::CanJoinAllSpaces
+    // Level 25 floats above fullscreen (NSMainMenuWindowLevel is 24)
+    panel.set_level(25);
+    panel.set_style_mask(NSWindowStyleMask::NonactivatingPanel | NSWindowStyleMask::Resizable);
+    panel.set_collection_behavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces
             | NSWindowCollectionBehavior::Stationary
-            | NSWindowCollectionBehavior::FullScreenAuxiliary;
-        panel.set_collection_behavior(collection_behavior);
-    }
+            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+    );
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,40 +184,38 @@ impl ShortcutManager {
 }
 
 fn position_bubble(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let monitor = window
-            .current_monitor()
-            .ok()
-            .flatten()
-            .or_else(|| window.primary_monitor().ok().flatten());
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
 
-        if let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) {
-            // Use full monitor size (not work_area) so it works in fullscreen apps
-            let screen = monitor.size();
-            let screen_pos = monitor.position();
-            let margin = 24; // Padding from bottom edge
-            let x = screen_pos.x + ((screen.width as i32 - size.width as i32) / 2);
-            let y = screen_pos.y + screen.height as i32 - size.height as i32 - margin;
-            let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-        }
-    }
+    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else {
+        return;
+    };
+
+    let screen = monitor.size();
+    let screen_pos = monitor.position();
+    let margin = 24;
+    let x = screen_pos.x + ((screen.width as i32 - size.width as i32) / 2);
+    let y = screen_pos.y + screen.height as i32 - size.height as i32 - margin;
+    let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
 }
 
-/// Focus a window and bring it to front using always-on-top toggle trick
 fn focus_and_bring_to_front(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
+    // Toggle always-on-top to ensure window comes to front
     let _ = window.set_always_on_top(true);
     let _ = window.set_always_on_top(false);
 }
 
-/// Show the main overlay bubble without stealing focus.
-/// For NSPanel windows, we just show - the panel level handles layering.
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         position_bubble(app);
-        // For the overlay bubble, just show it without stealing focus
-        // The NSPanel configuration handles appearing above other windows
         let _ = window.show();
     }
 }
@@ -334,9 +323,7 @@ async fn set_shortcut(app: AppHandle, modifiers: Vec<String>, key: String) -> Re
     Ok(())
 }
 
-/// Updates tray menu text after hotkey change.
-/// Note: Tauri 2.x doesn't easily support dynamic tray menu updates.
-/// The hotkey change takes effect immediately; tray text updates on restart.
+/// Placeholder for dynamic tray menu updates (not supported in Tauri 2.x)
 fn update_tray_menu_text(_app: &AppHandle, _config: &ShortcutConfig) {}
 
 fn show_or_create_main_app(app: &AppHandle) {
@@ -398,37 +385,30 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init());
 
-    // Initialize NSPanel plugin on macOS for fullscreen overlay support
     #[cfg(target_os = "macos")]
     {
         builder = builder.plugin(tauri_nspanel::init());
     }
 
     builder.setup(|app| {
-            // Initialize shortcut manager with config directory
             let config_dir = app.path().app_config_dir()
                 .unwrap_or_else(|_| PathBuf::from("."));
             let shortcut_manager = ShortcutManager::new(config_dir);
             let shortcut_config = shortcut_manager.get_config();
             let shortcut_display = shortcut_config.display_string();
 
-            // Store the manager in app state
             app.manage(Mutex::new(shortcut_manager));
 
-            // Setup tray with current shortcut display
             if let Err(e) = setup_tray(app.handle(), &shortcut_display) {
                 eprintln!("[voiceflow] Failed to setup tray: {}", e);
             }
 
-            // Convert main window to NSPanel for fullscreen overlay support on macOS
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
                 setup_macos_panel(&window);
             }
 
             let app_handle = app.handle().clone();
-
-            // Get the shortcut from config, fallback to default
             let shortcut = shortcut_config.to_shortcut()
                 .unwrap_or_else(|| Shortcut::new(Some(Modifiers::ALT), Code::Space));
 
