@@ -73,3 +73,35 @@ voiceflow/
 - The parakeet-mlx model (~600MB) auto-downloads to `~/.cache/huggingface/hub/` on first run
 - WebSocket server: `ws://127.0.0.1:8765`, Vite dev server: `http://localhost:1420`
 - Recording state machine: `idle` → `recording` → `processing` → `complete` → `idle`
+
+## Testing as New User
+
+To clear all app data and test fresh install experience:
+```bash
+# Clear model cache (~600MB, will re-download)
+rm -rf ~/.cache/huggingface/hub/models--mlx-community--parakeet-tdt-0.6b-v3
+
+# Clear app state (localStorage with onboarding, settings)
+rm -rf ~/Library/WebKit/voiceflow ~/Library/Caches/voiceflow
+
+# Clear app config
+rm -rf ~/Library/Application\ Support/com.voiceflow.app
+```
+
+## macOS Fullscreen Overlay
+
+The overlay bubble uses `tauri-nspanel` to appear over fullscreen apps (required since macOS Big Sur):
+- `FloatingBubblePanel` defined in `lib.rs` - NSPanel that doesn't steal focus
+- Window level 25 (above NSMainMenuWindowLevel)
+- Collection behavior: `CanJoinAllSpaces`, `Stationary`, `FullScreenAuxiliary`
+
+## Known Issues
+
+**Bundled sidecar not working**: The Python server bundled as sidecar (`voiceflow-server`) has issues in production builds. Currently only works in dev mode with `./scripts/dev.sh`.
+
+**Orphaned server process**: If app crashes or is force-quit, the Python server may keep running on port 8765. The app now attempts to kill orphaned processes on startup, but if issues persist:
+```bash
+lsof -ti:8765 | xargs kill -9
+```
+
+**Mic initialization delay**: ~500ms delay when starting recording (mic initializes fresh each time for privacy - no always-on mic).

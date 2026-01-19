@@ -21,6 +21,16 @@
         }
       ]
     },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "sh",
+          "cmd": "sh",
+          "args": ["-c", { "validator": "\\S+" }]
+        }
+      ]
+    },
     "global-shortcut:default",
     "process:default",
     "clipboard-manager:default",

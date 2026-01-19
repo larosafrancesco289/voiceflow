@@ -53,12 +53,26 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     }
   }, []);
 
+  const killOrphanedServer = useCallback(async () => {
+    // Kill any process using port 8765 (orphaned from previous session)
+    try {
+      const cmd = Command.create('sh', ['-c', 'lsof -ti:8765 | xargs kill -9 2>/dev/null || true']);
+      await cmd.execute();
+    } catch {
+      // Ignore errors - process might not exist
+    }
+  }, []);
+
   const ensureServerRunning = useCallback(async () => {
     if (!isTauri()) return;
     if (serverProcessRef.current || serverStartingRef.current) return;
 
     const isHealthy = await checkServerHealth();
-    if (isHealthy) return;
+    if (isHealthy) {
+      // Server is running but we didn't start it - kill orphaned process and start fresh
+      await killOrphanedServer();
+      await new Promise((r) => setTimeout(r, 100)); // Wait for port to free
+    }
 
     serverStartingRef.current = true;
     try {
@@ -70,7 +84,7 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     } finally {
       serverStartingRef.current = false;
     }
-  }, [checkServerHealth]);
+  }, [checkServerHealth, killOrphanedServer]);
 
   const handleFinalTranscription = useCallback(
     async (text: string) => {
@@ -196,6 +210,8 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     return () => {
       unlistenStart.then((fn) => fn());
       unlistenStop.then((fn) => fn());
+      // Kill the server process when app closes
+      serverProcessRef.current?.kill();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
