@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for VoiceFlow server binary."""
 
-import sys
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+import platform
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
@@ -76,7 +76,7 @@ exe = EXE(
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch='arm64',
+    target_arch='arm64' if platform.machine().lower() == 'arm64' else 'x86_64',
     codesign_identity=None,
     entitlements_file=None,
 )

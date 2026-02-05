@@ -10,31 +10,9 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
-    "shell:default",
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "voiceflow-server",
-          "sidecar": true,
-          "args": false
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "name": "sh",
-          "cmd": "sh",
-          "args": ["-c", { "validator": "\\S+" }]
-        }
-      ]
-    },
     "global-shortcut:default",
-    "process:default",
     "clipboard-manager:default",
     "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-read-text"
+    "clipboard-manager:deny-read-text"
   ]
 }

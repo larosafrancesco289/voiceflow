@@ -66,8 +66,13 @@ app = FastAPI(title="VoiceFlow Server", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "tauri://localhost",
+        "http://tauri.localhost",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -81,6 +86,7 @@ class Transcriber:
         self._loading = False
         self._loaded = asyncio.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self.load_error: Optional[str] = None
         self.loading_stage = ""
         self.loading_progress = 0.0
         self.loading_message = ""
@@ -112,6 +118,7 @@ class Transcriber:
             return
 
         self._loading = True
+        self.load_error = None
         self._loop = asyncio.get_event_loop()
         logger.info("Loading parakeet model...")
 
@@ -125,6 +132,7 @@ class Transcriber:
             logger.info("Parakeet model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
+            self.load_error = str(e)
             await broadcast_loading_status("error", 0.0, f"Failed to load model: {e}")
             self.model = None
         finally:
@@ -198,10 +206,9 @@ class Transcriber:
             self._warmup(model)
 
             return model
-        except ImportError:
-            logger.warning("parakeet-mlx not available, using mock transcription")
-            self._broadcast_sync("loading", 0.5, "Using mock transcription (parakeet-mlx not installed)")
-            return None
+        except ImportError as e:
+            logger.error("parakeet-mlx not available")
+            raise RuntimeError("parakeet-mlx is not installed in the server environment") from e
         except Exception as e:
             logger.error(f"Error loading parakeet model: {e}")
             raise
@@ -211,9 +218,8 @@ class Transcriber:
         await self._loaded.wait()
 
         if self.model is None:
-            # Mock transcription for development/testing
-            await asyncio.sleep(0.5)
-            return "[Transcription would appear here]"
+            error_message = self.load_error or "Transcription model is unavailable"
+            raise RuntimeError(error_message)
 
         try:
             loop = asyncio.get_event_loop()
@@ -223,7 +229,7 @@ class Transcriber:
             return result
         except Exception as e:
             logger.error(f"Transcription error: {e}")
-            return ""
+            raise
 
     def _transcribe_sync(self, audio_data: np.ndarray, sample_rate: int) -> str:
         """Synchronous transcription using temp file."""
@@ -308,6 +314,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
             # Wait for model to be ready
             await transcriber.wait_until_ready()
+            if transcriber.load_error:
+                await websocket.send_json({"type": "error", "error": transcriber.load_error})
+                return
         await websocket.send_json({"type": "ready"})
 
         while True:
@@ -344,8 +353,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.info(f"Processing {len(audio)} samples...")
                         text = ""
                         if len(audio) > 0 and transcriber:
-                            text = await transcriber.transcribe(audio)
-                            logger.info(f"Transcription: {text}")
+                            try:
+                                text = await transcriber.transcribe(audio)
+                                logger.info(f"Transcription: {text}")
+                            except Exception as transcribe_error:
+                                logger.error(f"Transcription failed: {transcribe_error}")
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "error": str(transcribe_error),
+                                })
+                                audio_buffer.clear()
+                                continue
                         else:
                             logger.info("No audio or transcriber not available")
                         await websocket.send_json({"type": "final", "text": text})

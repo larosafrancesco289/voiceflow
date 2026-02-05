@@ -14,7 +14,7 @@
     "macOSPrivateApi": true,
     "security": {
       "capabilities": ["default"],
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: blob:; connect-src 'self' ws://127.0.0.1:8765 http://127.0.0.1:8765 ws://localhost:1420 http://localhost:1420 tauri://localhost http://tauri.localhost"
     },
     "windows": [
       {
@@ -47,11 +47,6 @@
     "macOS": {
       "entitlements": "entitlements.plist",
       "infoPlist": "Info.plist"
-    }
-  },
-  "plugins": {
-    "shell": {
-      "open": true
     }
   }
 }

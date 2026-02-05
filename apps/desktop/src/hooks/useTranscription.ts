@@ -1,30 +1,26 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { Command, Child } from '@tauri-apps/plugin-shell';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useAppStore } from '../stores/appStore';
 import { useAudioCapture } from './useAudioCapture';
 import { useWebSocket, LoadingProgress } from './useWebSocket';
 
 const WS_URL = 'ws://127.0.0.1:8765/ws';
-const HEALTH_URL = 'http://127.0.0.1:8765/health';
 
 interface UseTranscriptionOptions {
   autoStart?: boolean;
 }
 
 export function useTranscription({ autoStart = true }: UseTranscriptionOptions = {}) {
-  const {
-    recordingState,
-    setRecordingState,
-    setCurrentTranscription,
-    setPartialTranscription,
-    addToHistory,
-    autoPasteEnabled,
-    reset,
-    setModelLoadingState,
-  } = useAppStore();
+  const recordingState = useAppStore((state) => state.recordingState);
+  const setRecordingState = useAppStore((state) => state.setRecordingState);
+  const setCurrentTranscription = useAppStore((state) => state.setCurrentTranscription);
+  const setPartialTranscription = useAppStore((state) => state.setPartialTranscription);
+  const addToHistory = useAppStore((state) => state.addToHistory);
+  const autoPasteEnabled = useAppStore((state) => state.autoPasteEnabled);
+  const reset = useAppStore((state) => state.reset);
+  const setModelLoadingState = useAppStore((state) => state.setModelLoadingState);
 
   const handleLoadingProgress = useCallback(
     (progress: LoadingProgress) => {
@@ -37,60 +33,30 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     },
     [setModelLoadingState]
   );
-
-  const serverProcessRef = useRef<Child | null>(null);
-  const serverStartingRef = useRef(false);
-
-  const checkServerHealth = useCallback(async () => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 500);
-      const response = await fetch(HEALTH_URL, { signal: controller.signal });
-      clearTimeout(timeout);
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const killOrphanedServer = useCallback(async () => {
-    // Kill any process using port 8765 (orphaned from previous session)
-    try {
-      const cmd = Command.create('sh', ['-c', 'lsof -ti:8765 | xargs kill -9 2>/dev/null || true']);
-      await cmd.execute();
-    } catch {
-      // Ignore errors - process might not exist
-    }
-  }, []);
+  const autoStartTriggeredRef = useRef(false);
 
   const ensureServerRunning = useCallback(async () => {
     if (!isTauri()) return;
-    if (serverProcessRef.current || serverStartingRef.current) return;
-
-    const isHealthy = await checkServerHealth();
-    if (isHealthy) {
-      // Server is running but we didn't start it - kill orphaned process and start fresh
-      await killOrphanedServer();
-      await new Promise((r) => setTimeout(r, 100)); // Wait for port to free
-    }
-
-    serverStartingRef.current = true;
     try {
-      const command = Command.sidecar('voiceflow-server');
-      const child = await command.spawn();
-      serverProcessRef.current = child;
+      await invoke('ensure_server_running');
     } catch (error) {
-      console.error('[Transcription] Failed to start server:', error);
-    } finally {
-      serverStartingRef.current = false;
+      const message = error instanceof Error ? error.message : 'Failed to start voice server';
+      console.error('[Transcription] Failed to ensure server is running:', error);
+      setModelLoadingState({
+        isLoading: true,
+        stage: 'error',
+        progress: 0,
+        message,
+      });
+      throw error;
     }
-  }, [checkServerHealth, killOrphanedServer]);
+  }, [setModelLoadingState]);
 
   const handleFinalTranscription = useCallback(
     async (text: string) => {
       if (!text.trim()) {
         reset();
-        invoke('hide_bubble');
+        void invoke('hide_bubble');
         return;
       }
 
@@ -112,20 +78,37 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
 
       setTimeout(() => {
         reset();
-        invoke('hide_bubble');
+        void invoke('hide_bubble');
       }, 1000);
     },
     [setCurrentTranscription, setRecordingState, addToHistory, autoPasteEnabled, reset]
   );
 
-  const { connect, sendAudio, startStream, endStream, isConnected, isReady, loadingProgress } = useWebSocket({
+  const {
+    connect,
+    disconnect,
+    sendAudio,
+    startStream,
+    endStream,
+    isConnected,
+    isReady,
+    loadingProgress,
+  } = useWebSocket({
     url: WS_URL,
     onPartial: setPartialTranscription,
     onFinal: handleFinalTranscription,
     onError: (error) => {
       console.error('[Transcription] WebSocket error:', error);
       setRecordingState('idle');
-      ensureServerRunning();
+      setModelLoadingState({
+        isLoading: true,
+        stage: 'error',
+        progress: 0,
+        message: error,
+      });
+      if (error === 'WebSocket connection error') {
+        void ensureServerRunning();
+      }
     },
     onLoading: handleLoadingProgress,
   });
@@ -190,30 +173,49 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
   stopRecordingRef.current = stopRecording;
 
   const startServer = useCallback(() => {
-    ensureServerRunning();
-    connect();
+    void (async () => {
+      await ensureServerRunning();
+      connect();
+    })();
   }, [ensureServerRunning, connect]);
 
   useEffect(() => {
-    if (autoStart) {
-      ensureServerRunning();
-      connect();
+    let disposed = false;
+    let unlistenStart: (() => void) | null = null;
+    let unlistenStop: (() => void) | null = null;
+
+    if (autoStart && !autoStartTriggeredRef.current) {
+      autoStartTriggeredRef.current = true;
+      startServer();
     }
 
-    const unlistenStart = listen('recording-start', () => {
-      startRecordingRef.current();
+    void listen('recording-start', () => {
+      void startRecordingRef.current();
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+        return;
+      }
+      unlistenStart = fn;
     });
-    const unlistenStop = listen('recording-stop', () => {
-      stopRecordingRef.current();
+
+    void listen('recording-stop', () => {
+      void stopRecordingRef.current();
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+        return;
+      }
+      unlistenStop = fn;
     });
 
     return () => {
-      unlistenStart.then((fn) => fn());
-      unlistenStop.then((fn) => fn());
-      // Kill the server process when app closes
-      serverProcessRef.current?.kill();
+      disposed = true;
+      unlistenStart?.();
+      unlistenStop?.();
+      disconnect();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStart, disconnect, startServer]);
 
   return {
     recordingState,

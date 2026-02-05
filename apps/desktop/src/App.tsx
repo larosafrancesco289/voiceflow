@@ -2,28 +2,11 @@ import { Onboarding, Settings, VoicePill, MainApp } from './components';
 import { useTranscription } from './hooks/useTranscription';
 import { useAppStore } from './stores/appStore';
 
-function App() {
+function BubbleApp() {
   const onboardingCompleted = useAppStore((state) => state.onboardingCompleted);
   const { analyser, isReady, startServer } = useTranscription({
     autoStart: onboardingCompleted,
   });
-  const pathname = window.location.pathname;
-
-  // Route: /settings
-  if (pathname === '/settings') {
-    return (
-      <div className="settings-page min-h-screen">
-        <Settings />
-      </div>
-    );
-  }
-
-  // Route: /main (main app window)
-  if (pathname === '/main') {
-    return <MainApp />;
-  }
-
-  // Default route: VoicePill (bubble window)
   if (!onboardingCompleted) {
     return <Onboarding isReady={isReady} onStartServer={startServer} />;
   }
@@ -33,6 +16,24 @@ function App() {
       <VoicePill analyser={analyser} />
     </div>
   );
+}
+
+function App() {
+  const pathname = window.location.pathname;
+
+  if (pathname === '/settings') {
+    return (
+      <div className="settings-page min-h-screen">
+        <Settings />
+      </div>
+    );
+  }
+
+  if (pathname === '/main') {
+    return <MainApp />;
+  }
+
+  return <BubbleApp />;
 }
 
 export default App;

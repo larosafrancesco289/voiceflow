@@ -13,7 +13,8 @@
     "dev": "cd apps/desktop && bun run tauri dev",
     "build": "cd apps/desktop && bun run tauri build",
     "desktop": "cd apps/desktop && bun run dev",
-    "python": "cd python && python -m voiceflow_server"
+    "python": "cd python && python -m voiceflow_server",
+    "test:e2e:shortcut": "./scripts/e2e-shortcut.sh"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

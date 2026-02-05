@@ -10,7 +10,7 @@ from pathlib import Path
 def main():
     project_root = Path(__file__).parent
     src_dir = project_root / "src" / "voiceflow_server"
-    output_dir = project_root.parent / "apps" / "desktop" / "src-tauri" / "bin"
+    output_dir = project_root.parent / "apps" / "desktop" / "src-tauri" / "binaries"
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

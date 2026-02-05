@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -10,6 +12,10 @@ use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_shell::{
+    process::{CommandChild, CommandEvent},
+    ShellExt,
+};
 
 #[cfg(target_os = "macos")]
 use tauri_nspanel::WebviewWindowExt as NSPanelWebviewWindowExt;
@@ -17,6 +23,21 @@ use tauri_nspanel::WebviewWindowExt as NSPanelWebviewWindowExt;
 use tauri_nspanel::objc2::{runtime::NSObjectProtocol, ClassType, Message};
 
 static IS_RECORDING: AtomicBool = AtomicBool::new(false);
+
+fn append_e2e_log(event: &str) {
+    let Ok(path) = std::env::var("VOICEFLOW_E2E_LOG") else {
+        return;
+    };
+
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{timestamp_ms} {event}");
+    }
+}
 
 // NSPanel that floats over fullscreen apps without stealing focus
 #[cfg(target_os = "macos")]
@@ -152,6 +173,11 @@ pub struct ShortcutManager {
     config_path: PathBuf,
 }
 
+#[derive(Default)]
+struct ServerManager {
+    child: Option<CommandChild>,
+}
+
 impl ShortcutManager {
     fn new(config_dir: PathBuf) -> Self {
         let config_path = config_dir.join("shortcut.json");
@@ -181,6 +207,84 @@ impl ShortcutManager {
         self.config = config;
         self.save_config()
     }
+}
+
+fn ensure_sidecar_running(app: &AppHandle) -> Result<(), String> {
+    let server_state = app.state::<Mutex<ServerManager>>();
+    let mut server_manager = server_state
+        .lock()
+        .map_err(|e| e.to_string())?;
+
+    if server_manager.child.is_some() {
+        return Ok(());
+    }
+
+    let (mut rx, child) = app
+        .shell()
+        .sidecar("voiceflow-server")
+        .map_err(|e| format!("Failed to prepare sidecar: {e}"))?
+        .spawn()
+        .map_err(|e| format!("Failed to spawn sidecar: {e}"))?;
+
+    let pid = child.pid();
+    server_manager.child = Some(child);
+    drop(server_manager);
+    append_e2e_log("server-started");
+
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => {
+                    eprintln!("[voiceflow-server:{pid}] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Stderr(line) => {
+                    eprintln!(
+                        "[voiceflow-server:{pid}][stderr] {}",
+                        String::from_utf8_lossy(&line)
+                    );
+                }
+                CommandEvent::Error(error) => {
+                    eprintln!("[voiceflow-server:{pid}][error] {error}");
+                }
+                CommandEvent::Terminated(payload) => {
+                    eprintln!("[voiceflow-server:{pid}] terminated: {payload:?}");
+                    append_e2e_log("server-terminated");
+                }
+                _ => {}
+            }
+        }
+
+        let server_state = app_handle.state::<Mutex<ServerManager>>();
+        if let Ok(mut manager) = server_state.lock() {
+            let tracked_pid = manager.child.as_ref().map(CommandChild::pid);
+            if tracked_pid == Some(pid) {
+                manager.child = None;
+            }
+        };
+    });
+
+    Ok(())
+}
+
+fn stop_sidecar(app: &AppHandle) -> Result<(), String> {
+    let child = {
+        let server_state = app.state::<Mutex<ServerManager>>();
+        let mut manager = server_state
+            .lock()
+            .map_err(|e| e.to_string())?;
+        manager.child.take()
+    };
+
+    if let Some(child) = child {
+        if let Err(error) = child.kill() {
+            eprintln!("[voiceflow-server] Failed to stop sidecar: {error}");
+        } else {
+            append_e2e_log("server-stopped");
+        }
+    }
+
+    Ok(())
 }
 
 fn position_bubble(app: &AppHandle) {
@@ -217,6 +321,7 @@ fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         position_bubble(app);
         let _ = window.show();
+        append_e2e_log("bubble-shown");
     }
 }
 
@@ -349,6 +454,16 @@ async fn show_main_app(app: AppHandle) {
     show_or_create_main_app(&app);
 }
 
+#[tauri::command]
+async fn ensure_server_running(app: AppHandle) -> Result<(), String> {
+    ensure_sidecar_running(&app)
+}
+
+#[tauri::command]
+async fn stop_server(app: AppHandle) -> Result<(), String> {
+    stop_sidecar(&app)
+}
+
 fn setup_tray(app: &AppHandle, shortcut_display: &str) -> Result<(), Box<dyn std::error::Error>> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit VoiceFlow", true, Some("CmdOrCtrl+Q"))?;
     let record_text = format!("Hold {} to Record", shortcut_display);
@@ -382,7 +497,6 @@ fn setup_tray(app: &AppHandle, shortcut_display: &str) -> Result<(), Box<dyn std
 pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init());
 
     #[cfg(target_os = "macos")]
@@ -398,6 +512,12 @@ pub fn run() {
             let shortcut_display = shortcut_config.display_string();
 
             app.manage(Mutex::new(shortcut_manager));
+            app.manage(Mutex::new(ServerManager::default()));
+            append_e2e_log("app-started");
+
+            if let Err(e) = ensure_sidecar_running(app.handle()) {
+                eprintln!("[voiceflow] Failed to start sidecar: {e}");
+            }
 
             if let Err(e) = setup_tray(app.handle(), &shortcut_display) {
                 eprintln!("[voiceflow] Failed to setup tray: {}", e);
@@ -418,6 +538,7 @@ pub fn run() {
                         ShortcutState::Pressed => {
                             if !IS_RECORDING.load(Ordering::SeqCst) {
                                 IS_RECORDING.store(true, Ordering::SeqCst);
+                                append_e2e_log("shortcut-pressed");
                                 let _ = app_handle.emit("recording-start", ());
                                 show_main_window(&app_handle);
                             }
@@ -425,6 +546,7 @@ pub fn run() {
                         ShortcutState::Released => {
                             if IS_RECORDING.load(Ordering::SeqCst) {
                                 IS_RECORDING.store(false, Ordering::SeqCst);
+                                append_e2e_log("shortcut-released");
                                 let _ = app_handle.emit("recording-stop", ());
                             }
                         }
@@ -442,9 +564,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // Handle dock click on macOS - show main app when all windows are closed
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Just hide instead of close for the main-app window
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Keep main-app alive so state is preserved and dock reopen is instant.
                 if window.label() == "main-app" {
+                    api.prevent_close();
                     let _ = window.hide();
                 }
             }
@@ -457,6 +580,8 @@ pub fn run() {
             get_current_shortcut,
             set_shortcut,
             show_main_app,
+            ensure_server_running,
+            stop_server,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -467,6 +592,11 @@ pub fn run() {
                 if !has_visible_windows {
                     show_or_create_main_app(app_handle);
                 }
+            }
+
+            if let tauri::RunEvent::Exit = event {
+                append_e2e_log("app-exit");
+                let _ = stop_sidecar(app_handle);
             }
         });
 }

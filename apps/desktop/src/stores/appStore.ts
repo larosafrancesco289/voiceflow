@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'complete';
 
@@ -15,6 +15,15 @@ export interface HotkeyConfig {
   key: string;
   display: string;
 }
+
+const inMemoryStorage: Storage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+  clear: () => undefined,
+  key: () => null,
+  length: 0,
+};
 
 interface AppState {
   recordingState: RecordingState;
@@ -86,6 +95,16 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'voiceflow-storage',
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') {
+          return inMemoryStorage;
+        }
+        const storage = window.localStorage;
+        if (!storage || typeof storage.setItem !== 'function') {
+          return inMemoryStorage;
+        }
+        return storage;
+      }),
       partialize: (state) => ({
         autoPasteEnabled: state.autoPasteEnabled,
         onboardingCompleted: state.onboardingCompleted,

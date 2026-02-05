@@ -65,6 +65,28 @@ alias voiceflow="cd ~/path/to/voiceflow && ./scripts/dev.sh"
 
 Hold **Option (⌥) + Space** to record. Release to transcribe and paste.
 
+## Testing
+
+```bash
+# Frontend integration tests (Vitest)
+cd apps/desktop && bun run test
+
+# Python websocket integration tests (pytest)
+cd python && uv run pytest
+```
+
+### Global Shortcut E2E (Packaged App)
+
+```bash
+bun run test:e2e:shortcut
+```
+
+This builds a debug app bundle, launches it, synthesizes a real **Option + Space** key press via macOS CGEvent, and verifies the shortcut press/release path from runtime logs (`.e2e/shortcut-events.log`).
+
+Requirements:
+- Accessibility permission for the process executing the script (Terminal/Codex)
+- macOS environment with UI session (not headless SSH)
+
 ## Tech Stack
 
 - **Desktop**: Tauri 2, React, TypeScript

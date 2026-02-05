@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pyinstaller>=6.3.0",
+    "pytest>=8.3.4",
 ]
 
 [project.scripts]
@@ -31,4 +32,8 @@ packages = ["src/voiceflow_server"]
 [tool.uv]
 dev-dependencies = [
     "pyinstaller>=6.3.0",
+    "pytest>=8.3.4",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
