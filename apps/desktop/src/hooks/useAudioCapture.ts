@@ -28,6 +28,45 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
   const isCapturingRef = useRef(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
 
+  const cleanupResources = useCallback(() => {
+    if (workletRef.current) {
+      workletRef.current.port.onmessage = null;
+      workletRef.current.disconnect();
+      workletRef.current = null;
+    }
+
+    if (scriptProcessorRef.current) {
+      scriptProcessorRef.current.disconnect();
+      scriptProcessorRef.current = null;
+    }
+
+    if (mutedGainRef.current) {
+      mutedGainRef.current.disconnect();
+      mutedGainRef.current = null;
+    }
+
+    if (analyserRef.current) {
+      analyserRef.current.disconnect();
+      analyserRef.current = null;
+    }
+    setAnalyser(null);
+
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      void audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  }, []);
+
   const start = useCallback(async () => {
     if (isCapturingRef.current) return;
 
@@ -108,51 +147,17 @@ export function useAudioCapture({ onAudioData, onError }: AudioCaptureOptions = 
       mutedGain.connect(audioContext.destination);
       isCapturingRef.current = true;
     } catch (error) {
+      isCapturingRef.current = false;
+      cleanupResources();
       console.error('[AudioCapture] Failed to start:', error);
       onError?.(error instanceof Error ? error : new Error('Failed to capture audio'));
     }
-  }, [onAudioData, onError]);
+  }, [cleanupResources, onAudioData, onError]);
 
   const stop = useCallback(() => {
     isCapturingRef.current = false;
-
-    if (workletRef.current) {
-      workletRef.current.port.onmessage = null;
-      workletRef.current.disconnect();
-      workletRef.current = null;
-    }
-
-    if (scriptProcessorRef.current) {
-      scriptProcessorRef.current.disconnect();
-      scriptProcessorRef.current = null;
-    }
-
-    if (mutedGainRef.current) {
-      mutedGainRef.current.disconnect();
-      mutedGainRef.current = null;
-    }
-
-    if (analyserRef.current) {
-      analyserRef.current.disconnect();
-      analyserRef.current = null;
-    }
-    setAnalyser(null);
-
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      void audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-  }, []);
+    cleanupResources();
+  }, [cleanupResources]);
 
   useEffect(() => {
     return () => {

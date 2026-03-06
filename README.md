@@ -1,97 +1,106 @@
 # VoiceFlow
 
-Local, offline speech-to-text for macOS. Hold a hotkey, speak, release.
+VoiceFlow is a local macOS dictation app: hold a hotkey, speak, release, and paste the transcription into the app you were already using.
 
-## Features
+## Value Proposition
 
-- **100% Offline**: All transcription happens on your Mac. No data leaves your machine.
-- **25 Languages**: Automatic language detection across European languages.
-- **Fast**: Optimized for Apple Silicon with MLX acceleration.
-- **Private**: No accounts, no cloud, no telemetry.
-- **Auto-Paste**: Transcribed text is automatically pasted into your active application.
+- 100% local speech-to-text with no cloud dependency
+- Fast Apple Silicon transcription through `parakeet-mlx`
+- A tiny always-on bubble UI instead of a full editor workflow
+- Automatic paste back into the active app
 
-## Supported Languages
+## Stack
 
-| | | | | |
-|---|---|---|---|---|
-| Bulgarian | Croatian | Czech | Danish | Dutch |
-| English | Estonian | Finnish | French | German |
-| Greek | Hungarian | Italian | Latvian | Lithuanian |
-| Maltese | Polish | Portuguese | Romanian | Russian |
-| Slovak | Slovenian | Spanish | Swedish | Ukrainian |
+- Desktop shell: Tauri 2 + Rust
+- UI: React + TypeScript + Zustand
+- Transcription server: FastAPI + WebSocket + `parakeet-mlx`
+- Packaging: Python sidecar bundled into the Tauri app
 
-Language is detected automatically.
+## Repository Layout
+
+```text
+apps/desktop/             Tauri app, React UI, Rust shell
+apps/desktop/src-tauri/   Tauri commands, tray, shortcut handling, sidecar lifecycle
+python/                   FastAPI transcription server and Python tests
+scripts/                  Dev, build, and end-to-end helpers
+```
 
 ## Requirements
 
-- macOS with Apple Silicon (M1/M2/M3/M4)
-- [Bun](https://bun.sh/) - `curl -fsSL https://bun.sh/install | bash`
-- [uv](https://docs.astral.sh/uv/) - `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- [Rust](https://rustup.rs/) - `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- macOS on Apple Silicon
+- [Bun](https://bun.sh/)
+- [uv](https://docs.astral.sh/uv/)
+- [Rust](https://rustup.rs/)
 
-## Installation
+## Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/larosafrancesco289/voiceflow.git
 cd voiceflow
-
-# Install dependencies
 bun install
 cd python && uv sync && cd ..
-```
-
-## Running
-
-```bash
 ./scripts/dev.sh
 ```
 
-This starts both the Python transcription server and the Tauri app. The speech recognition model (~600MB) downloads automatically on first run.
+First launch downloads the speech model on demand (about 600MB).
 
-Grant permissions when prompted:
-- **Microphone**: Required for recording
-- **Accessibility**: Required for auto-paste and global hotkey
+## Permissions
 
-### Quick Alias
+VoiceFlow needs:
 
-Add to your `~/.zshrc` or `~/.bashrc`:
+- Microphone access for recording
+- Accessibility access for the global shortcut and auto-paste
+
+## Daily Commands
 
 ```bash
-alias voiceflow="cd ~/path/to/voiceflow && ./scripts/dev.sh"
+# Run the desktop app in development
+./scripts/dev.sh
+
+# Run the full automated test suite
+bun run test
+
+# Build the React frontend only
+bun run build:desktop
+
+# Build the packaged Python sidecar binary
+bun run build:server
+
+# Run build + tests together
+bun run check
 ```
-
-## Usage
-
-Hold **Option (⌥) + Space** to record. Release to transcribe and paste.
 
 ## Testing
 
 ```bash
-# Frontend integration tests (Vitest)
-cd apps/desktop && bun run test
+# React and hook tests
+bun run test:desktop
 
-# Python websocket integration tests (pytest)
-cd python && uv run pytest
-```
+# FastAPI / websocket regression tests
+bun run test:python
 
-### Global Shortcut E2E (Packaged App)
-
-```bash
+# Packaged shortcut end-to-end check
 bun run test:e2e:shortcut
 ```
 
-This builds a debug app bundle, launches it, synthesizes a real **Option + Space** key press via macOS CGEvent, and verifies the shortcut press/release path from runtime logs (`.e2e/shortcut-events.log`).
+The shortcut E2E test launches the packaged app, synthesizes `Option + Space`, and verifies the runtime event log in `.e2e/shortcut-events.log`.
 
-Requirements:
-- Accessibility permission for the process executing the script (Terminal/Codex)
-- macOS environment with UI session (not headless SSH)
+## Hotkey Support
 
-## Tech Stack
+The shortcut picker currently supports:
 
-- **Desktop**: Tauri 2, React, TypeScript
-- **Transcription**: Python, FastAPI, parakeet-mlx
-- **ML Runtime**: Apple MLX
+- Letters `A-Z`
+- Numbers `0-9`
+- `Space`
+- `F1-F12`
+
+All shortcuts must include at least one modifier key.
+
+## Troubleshooting
+
+- If the Rust/Tauri build fails with an Xcode toolchain error, make sure Xcode Command Line Tools are installed and the Xcode license has been accepted.
+- If auto-paste or the global shortcut does not work, re-check Accessibility permissions for the app or terminal running it.
+- If the first model download fails, use the in-app retry action instead of restarting the whole app.
 
 ## Credits
 

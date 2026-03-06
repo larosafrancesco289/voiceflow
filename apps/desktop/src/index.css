@@ -26,11 +26,6 @@ html, body, #root {
   box-sizing: border-box;
 }
 
-/* Settings page gets solid background */
-.settings-page {
-  background: #0a0a0a !important;
-}
-
 @layer utilities {
   .drag-region {
     -webkit-app-region: drag;

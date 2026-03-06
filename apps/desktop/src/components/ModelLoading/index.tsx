@@ -1,5 +1,10 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore, ModelLoadingState } from '../../stores/appStore';
+import {
+  getErrorMessage,
+  recoverTranscriptionServer,
+} from '../../utils/serverControl';
 
 interface ModelLoadingProps {
   variant?: 'pill' | 'full';
@@ -46,6 +51,37 @@ function getStageLabel(stage: ModelLoadingState['stage']): string {
 
 export function ModelLoading({ variant = 'full' }: ModelLoadingProps) {
   const modelLoadingState = useAppStore((state) => state.modelLoadingState);
+  const setModelLoadingState = useAppStore((state) => state.setModelLoadingState);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    setModelLoadingState({
+      isLoading: true,
+      stage: 'loading',
+      progress: 0,
+      message: 'Retrying speech model setup...',
+    });
+
+    try {
+      await recoverTranscriptionServer();
+      setModelLoadingState({
+        isLoading: true,
+        stage: 'loading',
+        progress: 0,
+        message: 'Waiting for the speech model to come back online...',
+      });
+    } catch (error) {
+      setModelLoadingState({
+        isLoading: true,
+        stage: 'error',
+        progress: 0,
+        message: getErrorMessage(error, 'Failed to restart speech model setup'),
+      });
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   if (!modelLoadingState.isLoading) {
     return null;
@@ -101,6 +137,19 @@ export function ModelLoading({ variant = 'full' }: ModelLoadingProps) {
         <p className="text-[10px] text-white/30 text-center max-w-[200px]">
           First-time setup: downloading speech recognition model (~600MB)
         </p>
+      )}
+
+      {modelLoadingState.stage === 'error' && (
+        <button
+          type="button"
+          onClick={() => {
+            void handleRetry();
+          }}
+          disabled={isRetrying}
+          className="rounded-full bg-white px-4 py-2 text-xs font-medium text-black transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isRetrying ? 'Retrying...' : 'Retry setup'}
+        </button>
       )}
     </motion.div>
   );

@@ -6,14 +6,14 @@ import logging
 import signal
 import sys
 import tempfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Optional, Set
 
 import numpy as np
 import soundfile as sf
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(
@@ -42,7 +42,7 @@ async def broadcast_loading_status(stage: str, progress: float, message: str):
     }
 
     disconnected = set()
-    for client in connected_clients:
+    for client in tuple(connected_clients):
         try:
             await client.send_json(payload)
         except Exception:
@@ -52,14 +52,28 @@ async def broadcast_loading_status(stage: str, progress: float, message: str):
     connected_clients.difference_update(disconnected)
 
 
+def websocket_error(error: str, *, affects_readiness: bool = False) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "type": "error",
+        "error": error,
+    }
+    if affects_readiness:
+        payload["affectsReadiness"] = True
+    return payload
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize transcriber on startup."""
     global transcriber
     transcriber = Transcriber()
-    asyncio.create_task(transcriber.load_model())
+    transcriber.ensure_loading()
     yield
-    # Cleanup on shutdown (if needed)
+    active_task = getattr(transcriber, "_load_task", None) if transcriber else None
+    if active_task and not active_task.done():
+        active_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await active_task
 
 
 app = FastAPI(title="VoiceFlow Server", lifespan=lifespan)
@@ -85,6 +99,8 @@ class Transcriber:
         self.model = None
         self._loading = False
         self._loaded = asyncio.Event()
+        self._load_lock = asyncio.Lock()
+        self._load_task: Optional[asyncio.Task[None]] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self.load_error: Optional[str] = None
         self.loading_stage = ""
@@ -107,37 +123,73 @@ class Transcriber:
                 self._loop
             )
 
-    async def load_model(self):
+    def ensure_loading(self, *, force: bool = False) -> asyncio.Task[None]:
+        """Start model loading if it is not already in progress."""
+        if self._load_task and not self._load_task.done():
+            return self._load_task
+
+        loop = asyncio.get_running_loop()
+        self._load_task = loop.create_task(self.load_model(force=force))
+        return self._load_task
+
+    async def load_model(self, *, force: bool = False):
         """Load the parakeet model asynchronously."""
-        if self.model is not None:
+        if self.model is not None and not force:
             self._loaded.set()
             return
 
-        if self._loading:
-            await self._loaded.wait()
-            return
+        async with self._load_lock:
+            if self.model is not None and not force:
+                self._loaded.set()
+                return
 
-        self._loading = True
-        self.load_error = None
-        self._loop = asyncio.get_event_loop()
-        logger.info("Loading parakeet model...")
+            if self.load_error and not force and self._loaded.is_set():
+                return
 
-        await broadcast_loading_status("downloading", 0.0, "Checking model cache...")
-
-        try:
-            # Import and load in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            self.model = await loop.run_in_executor(None, self._load_model_sync)
-            await broadcast_loading_status("ready", 1.0, "Model ready")
-            logger.info("Parakeet model loaded successfully")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            self.load_error = str(e)
-            await broadcast_loading_status("error", 0.0, f"Failed to load model: {e}")
+            self._loading = True
+            self._loaded.clear()
             self.model = None
-        finally:
-            self._loading = False
-            self._loaded.set()
+            self.load_error = None
+            self._loop = asyncio.get_running_loop()
+            logger.info("Loading parakeet model...")
+
+            await broadcast_loading_status("downloading", 0.0, "Checking model cache...")
+
+            try:
+                # Import and load in thread pool to avoid blocking
+                loop = asyncio.get_running_loop()
+                self.model = await loop.run_in_executor(None, self._load_model_sync)
+                await broadcast_loading_status("ready", 1.0, "Model ready")
+                logger.info("Parakeet model loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load model: {e}")
+                self.load_error = str(e)
+                await broadcast_loading_status("error", 0.0, f"Failed to load model: {e}")
+                self.model = None
+            finally:
+                self._loading = False
+                self._loaded.set()
+
+    def health_snapshot(self) -> dict[str, object]:
+        """Return the current server health and model state."""
+        if self.load_error:
+            status = "error"
+        elif self.model is not None:
+            status = "ready"
+        elif self._loading:
+            status = "loading"
+        else:
+            status = "starting"
+
+        return {
+            "status": status,
+            "model_loaded": self.model is not None,
+            "loading": self._loading,
+            "stage": self.loading_stage,
+            "progress": self.loading_progress,
+            "message": self.loading_message,
+            "error": self.load_error,
+        }
 
     def _warmup(self, model):
         """Run warmup inference to avoid cold start latency on first transcription.
@@ -180,9 +232,6 @@ class Transcriber:
 
             # Try to set up progress callback for huggingface_hub downloads
             try:
-                from huggingface_hub import snapshot_download
-                from huggingface_hub.utils import are_progress_bars_disabled
-
                 # Check if model is already cached
                 cache_path = Path.home() / ".cache" / "huggingface" / "hub"
                 model_cache = cache_path / "models--mlx-community--parakeet-tdt-0.6b-v3"
@@ -283,9 +332,30 @@ class AudioBuffer:
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    if transcriber is None:
+        return {
+            "status": "starting",
+            "model_loaded": False,
+            "loading": False,
+            "stage": "",
+            "progress": 0.0,
+            "message": "Starting server...",
+            "error": None,
+        }
+
+    return transcriber.health_snapshot()
+
+
+@app.post("/model/reload", status_code=202)
+async def reload_model():
+    """Retry model initialization without restarting the app."""
+    if transcriber is None:
+        raise HTTPException(status_code=503, detail="Transcriber is not initialized yet")
+
+    transcriber.ensure_loading(force=True)
     return {
-        "status": "healthy",
-        "model_loaded": transcriber is not None and transcriber.model is not None,
+        "status": "reloading",
+        "message": "Model reload requested",
     }
 
 
@@ -302,22 +372,21 @@ async def websocket_endpoint(websocket: WebSocket):
     is_recording = False
 
     try:
-        # Send current loading status if model is still loading
+        # Send current server state immediately so the client can recover in place.
         if transcriber:
             if transcriber._loading:
-                # Send current loading state to newly connected client
                 await websocket.send_json({
                     "type": "loading",
                     "stage": transcriber.loading_stage or "loading",
                     "progress": transcriber.loading_progress,
                     "message": transcriber.loading_message or "Loading model...",
                 })
-            # Wait for model to be ready
-            await transcriber.wait_until_ready()
-            if transcriber.load_error:
-                await websocket.send_json({"type": "error", "error": transcriber.load_error})
-                return
-        await websocket.send_json({"type": "ready"})
+            elif transcriber.load_error:
+                await websocket.send_json(
+                    websocket_error(transcriber.load_error, affects_readiness=True)
+                )
+            elif transcriber.model is not None:
+                await websocket.send_json({"type": "ready"})
 
         while True:
             message = await websocket.receive()
@@ -340,6 +409,33 @@ async def websocket_endpoint(websocket: WebSocket):
                     msg_type = data.get("type")
 
                     if msg_type == "start":
+                        if not transcriber:
+                            await websocket.send_json(
+                                websocket_error(
+                                    "Transcription server is unavailable",
+                                    affects_readiness=True,
+                                )
+                            )
+                            continue
+
+                        if transcriber._loading:
+                            await websocket.send_json(
+                                websocket_error(
+                                    "Speech model is still loading",
+                                    affects_readiness=True,
+                                )
+                            )
+                            continue
+
+                        if transcriber.load_error:
+                            await websocket.send_json(
+                                websocket_error(
+                                    transcriber.load_error,
+                                    affects_readiness=True,
+                                )
+                            )
+                            continue
+
                         is_recording = True
                         audio_buffer.clear()
                         logger.info("Recording started")
@@ -358,10 +454,9 @@ async def websocket_endpoint(websocket: WebSocket):
                                 logger.info(f"Transcription: {text}")
                             except Exception as transcribe_error:
                                 logger.error(f"Transcription failed: {transcribe_error}")
-                                await websocket.send_json({
-                                    "type": "error",
-                                    "error": str(transcribe_error),
-                                })
+                                await websocket.send_json(
+                                    websocket_error(str(transcribe_error))
+                                )
                                 audio_buffer.clear()
                                 continue
                         else:
@@ -369,6 +464,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         await websocket.send_json({"type": "final", "text": text})
 
                         audio_buffer.clear()
+
+                    elif msg_type == "reload":
+                        if not transcriber:
+                            await websocket.send_json(
+                                websocket_error(
+                                    "Transcription server is unavailable",
+                                    affects_readiness=True,
+                                )
+                            )
+                            continue
+                        transcriber.ensure_loading(force=True)
 
                 except json.JSONDecodeError:
                     logger.warning("Invalid JSON message received")
@@ -378,7 +484,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         try:
-            await websocket.send_json({"type": "error", "error": str(e)})
+            await websocket.send_json(websocket_error(str(e)))
         except Exception as send_error:
             logger.debug(f"Failed to send error to client: {send_error}")
     finally:

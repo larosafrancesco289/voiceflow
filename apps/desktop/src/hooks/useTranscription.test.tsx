@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
     listeners,
     latestWebSocketOptions: null as null | {
       onFinal?: (text: string) => Promise<void>;
-      onError?: (error: string) => void;
+      onError?: (error: { message: string; affectsReadiness: boolean }) => void;
     },
     listenMock: vi.fn(async (eventName: string, callback: () => void) => {
       listeners.set(eventName, callback);
@@ -43,7 +43,7 @@ vi.mock('./useWebSocket', () => ({
   useWebSocket: (options: unknown) => {
     mocks.latestWebSocketOptions = options as {
       onFinal?: (text: string) => Promise<void>;
-      onError?: (error: string) => void;
+      onError?: (error: { message: string; affectsReadiness: boolean }) => void;
     };
     return {
       connect: mocks.connectMock,
@@ -70,6 +70,7 @@ describe('useTranscription', () => {
   beforeEach(() => {
     mocks.listeners.clear();
     mocks.latestWebSocketOptions = null;
+    mocks.listenMock.mockClear();
     mocks.invokeMock.mockReset().mockResolvedValue(undefined);
     mocks.writeTextMock.mockReset().mockResolvedValue(undefined);
     mocks.connectMock.mockReset();
@@ -141,7 +142,10 @@ describe('useTranscription', () => {
     ).length;
 
     await act(async () => {
-      mocks.latestWebSocketOptions?.onError?.('WebSocket connection error');
+      mocks.latestWebSocketOptions?.onError?.({
+        message: 'WebSocket connection error',
+        affectsReadiness: true,
+      });
     });
 
     const finalEnsureCalls = mocks.invokeMock.mock.calls.filter(
@@ -150,5 +154,37 @@ describe('useTranscription', () => {
     expect(finalEnsureCalls).toBeGreaterThan(initialEnsureCalls);
     expect(useAppStore.getState().modelLoadingState.stage).toBe('error');
     expect(useAppStore.getState().modelLoadingState.isLoading).toBe(true);
+  });
+
+  it('keeps the model ready after non-fatal transcription errors', async () => {
+    renderHook(() => useTranscription({ autoStart: true }));
+
+    await act(async () => {
+      mocks.latestWebSocketOptions?.onError?.({
+        message: 'failed@16000',
+        affectsReadiness: false,
+      });
+    });
+
+    expect(useAppStore.getState().recordingState).toBe('idle');
+    expect(useAppStore.getState().modelLoadingState.stage).toBe('ready');
+    expect(useAppStore.getState().modelLoadingState.isLoading).toBe(false);
+    expect(mocks.invokeMock).toHaveBeenCalledWith('hide_bubble');
+  });
+
+  it('can run in status-only mode without registering shortcut listeners', async () => {
+    renderHook(() =>
+      useTranscription({
+        autoStart: true,
+        listenForGlobalShortcuts: false,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mocks.invokeMock).toHaveBeenCalledWith('ensure_server_running');
+    });
+
+    expect(mocks.connectMock).toHaveBeenCalledTimes(1);
+    expect(mocks.listenMock).not.toHaveBeenCalled();
   });
 });

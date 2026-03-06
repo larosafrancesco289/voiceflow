@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import { ModelLoading } from '../ModelLoading';
 import { HotkeyPicker } from '../HotkeyPicker';
@@ -6,6 +6,7 @@ import { Toggle } from '../Toggle';
 import { getModifierSymbol } from '../../utils/modifierSymbols';
 
 type Tab = 'home' | 'settings';
+type HistoryItem = { text: string; timestamp: number };
 
 function StatusBadge({ ready }: { ready: boolean }): React.ReactNode {
   const statusClass = ready
@@ -21,9 +22,54 @@ function StatusBadge({ ready }: { ready: boolean }): React.ReactNode {
   );
 }
 
+function HistoryList({
+  history,
+  emptyTitle,
+  emptyDescription,
+  truncateText = false,
+  maxHeightClass,
+}: {
+  history: HistoryItem[];
+  emptyTitle: string;
+  emptyDescription?: string;
+  truncateText?: boolean;
+  maxHeightClass: string;
+}) {
+  if (history.length === 0) {
+    return (
+      <div className="p-4 rounded-xl bg-white/5 text-center">
+        <p className="text-sm text-white/25">{emptyTitle}</p>
+        {emptyDescription && (
+          <p className="text-xs text-white/15 mt-1">{emptyDescription}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`space-y-2 overflow-y-auto ${maxHeightClass}`}>
+      {history.slice(0, 5).map((item) => (
+        <div
+          key={item.timestamp}
+          className="p-3 rounded-lg bg-white/5"
+        >
+          <p className={`text-sm text-white/80 ${truncateText ? 'truncate' : 'line-clamp-2'}`}>
+            {item.text}
+          </p>
+          <p className="text-[10px] mt-1 text-white/25">
+            {new Date(item.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function HomeView() {
   const hotkey = useAppStore((state) => state.hotkey);
-  const modelLoadingState = useAppStore((state) => state.modelLoadingState);
   const history = useAppStore((state) => state.history);
 
   return (
@@ -49,42 +95,20 @@ function HomeView() {
         </div>
       </div>
 
-      {/* Model Status (only show when loading) */}
-      {modelLoadingState.isLoading && (
-        <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 mb-4">
-          <ModelLoading variant="full" />
-        </div>
-      )}
-
       {/* Recent History */}
       <div className="flex-1 min-h-0">
         <p className="text-xs text-white/40 mb-2 uppercase tracking-wider">
           Recent ({history.length})
         </p>
         {history.length === 0 ? (
-          <div className="p-4 rounded-xl bg-white/5 text-center">
-            <p className="text-sm text-white/25">No transcriptions yet</p>
-            <p className="text-xs text-white/15 mt-1">
-              Hold {hotkey.display} to start recording
-            </p>
-          </div>
+          <HistoryList
+            history={history}
+            emptyTitle="No transcriptions yet"
+            emptyDescription={`Hold ${hotkey.display} to start recording`}
+            maxHeightClass="max-h-[200px]"
+          />
         ) : (
-          <div className="space-y-2 max-h-[200px] overflow-y-auto">
-            {history.slice(0, 5).map((item) => (
-              <div
-                key={item.timestamp}
-                className="p-3 rounded-lg bg-white/5"
-              >
-                <p className="text-sm text-white/80 line-clamp-2">{item.text}</p>
-                <p className="text-[10px] mt-1 text-white/25">
-                  {new Date(item.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            ))}
-          </div>
+          <HistoryList history={history} emptyTitle="" maxHeightClass="max-h-[200px]" />
         )}
       </div>
     </div>
@@ -123,6 +147,7 @@ function SettingsView() {
           </p>
           {history.length > 0 && (
             <button
+              type="button"
               onClick={clearHistory}
               className="text-xs transition-colors hover:opacity-80 text-white/40"
             >
@@ -132,34 +157,32 @@ function SettingsView() {
         </div>
 
         {history.length === 0 ? (
-          <p className="text-sm py-4 text-white/25">No transcriptions yet</p>
+          <HistoryList history={history} emptyTitle="No transcriptions yet" maxHeightClass="max-h-[140px]" />
         ) : (
-          <div className="space-y-2 max-h-[140px] overflow-y-auto">
-            {history.slice(0, 5).map((item) => (
-              <div
-                key={item.timestamp}
-                className="p-3 rounded-lg bg-white/5"
-              >
-                <p className="text-sm truncate text-white/80">{item.text}</p>
-                <p className="text-[10px] mt-1 text-white/25">
-                  {new Date(item.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            ))}
-          </div>
+          <HistoryList
+            history={history}
+            emptyTitle=""
+            truncateText
+            maxHeightClass="max-h-[140px]"
+          />
         )}
       </div>
     </div>
   );
 }
 
-export function MainApp() {
-  const [activeTab, setActiveTab] = useState<Tab>('home');
+interface MainAppProps {
+  initialTab?: Tab;
+}
+
+export function MainApp({ initialTab = 'home' }: MainAppProps) {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const modelLoadingState = useAppStore((state) => state.modelLoadingState);
   const isModelReady = !modelLoadingState.isLoading;
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans flex flex-col">
@@ -196,6 +219,7 @@ export function MainApp() {
         {/* Tab Navigation */}
         <div className="flex gap-1 p-1 rounded-lg bg-white/5">
           <button
+            type="button"
             onClick={() => setActiveTab('home')}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'home'
@@ -206,6 +230,7 @@ export function MainApp() {
             Home
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('settings')}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'settings'
@@ -217,6 +242,14 @@ export function MainApp() {
           </button>
         </div>
       </div>
+
+      {modelLoadingState.isLoading && (
+        <div className="px-6 pb-4">
+          <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20">
+            <ModelLoading variant="full" />
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 px-6 pb-4 flex flex-col">

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/appStore';
 import { ModelLoading } from './ModelLoading';
 import { ProcessingSpinner } from './ProcessingSpinner';
@@ -25,15 +25,19 @@ function PillContent({ analyser }: VoicePillProps): React.ReactNode {
 
 export function VoicePill({ analyser }: VoicePillProps): React.ReactNode {
   const handleClick = (): void => {
-    invoke('show_main_app');
+    if (isTauri()) {
+      void invoke('show_main_app');
+    }
   };
 
   return (
-    <div
+    <button
+      type="button"
+      aria-label="Open VoiceFlow"
       className="w-[90px] h-7 flex items-center justify-center rounded-full bg-black cursor-pointer"
       onClick={handleClick}
     >
       <PillContent analyser={analyser} />
-    </div>
+    </button>
   );
 }

@@ -10,10 +10,16 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "cd apps/desktop && bun run tauri dev",
+    "dev": "./scripts/dev.sh",
     "build": "cd apps/desktop && bun run tauri build",
+    "build:desktop": "cd apps/desktop && bun run build",
+    "build:server": "./scripts/build-server.sh",
     "desktop": "cd apps/desktop && bun run dev",
-    "python": "cd python && python -m voiceflow_server",
+    "python": "cd python && uv run python -m voiceflow_server.server",
+    "test": "bun run test:desktop && bun run test:python",
+    "test:desktop": "cd apps/desktop && bun run test",
+    "test:python": "cd python && uv run pytest",
+    "check": "bun run build:desktop && bun run test",
     "test:e2e:shortcut": "./scripts/e2e-shortcut.sh"
   },
   "devDependencies": {

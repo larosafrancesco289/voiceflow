@@ -19,6 +19,10 @@ class BootstrapTranscriber:
         self.loading_progress = 1.0
         self.loading_message = "ready"
 
+    def ensure_loading(self, force=False):
+        task = asyncio.get_running_loop().create_task(self.load_model())
+        return task
+
     async def load_model(self):
         self._loaded.set()
 
@@ -27,6 +31,17 @@ class BootstrapTranscriber:
 
     async def transcribe(self, _audio_data, sample_rate=16000):
         return f"sample_rate={sample_rate}"
+
+    def health_snapshot(self):
+        return {
+            "status": "ready",
+            "model_loaded": True,
+            "loading": False,
+            "stage": self.loading_stage,
+            "progress": self.loading_progress,
+            "message": self.loading_message,
+            "error": self.load_error,
+        }
 
 
 @pytest.fixture
@@ -90,6 +105,7 @@ def test_websocket_reports_transcription_errors(client):
         message = ws.receive_json()
         assert message["type"] == "error"
         assert "failed@16000" in message["error"]
+        assert message.get("affectsReadiness") is not True
 
 
 def test_websocket_returns_model_load_error(client):
@@ -110,3 +126,64 @@ def test_websocket_returns_model_load_error(client):
         message = ws.receive_json()
         assert message["type"] == "error"
         assert message["error"] == "model failed to initialize"
+        assert message["affectsReadiness"] is True
+
+
+def test_health_endpoint_reports_transcriber_state(client):
+    class HealthTranscriber:
+        def health_snapshot(self):
+            return {
+                "status": "loading",
+                "model_loaded": False,
+                "loading": True,
+                "stage": "warmup",
+                "progress": 0.9,
+                "message": "Warming up model...",
+                "error": None,
+            }
+
+    server.transcriber = HealthTranscriber()
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "loading",
+        "model_loaded": False,
+        "loading": True,
+        "stage": "warmup",
+        "progress": 0.9,
+        "message": "Warming up model...",
+        "error": None,
+    }
+
+
+def test_reload_endpoint_requests_forced_reload(client):
+    calls = []
+
+    class ReloadableTranscriber:
+        def ensure_loading(self, force=False):
+            calls.append(force)
+            return None
+
+        def health_snapshot(self):
+            return {
+                "status": "error",
+                "model_loaded": False,
+                "loading": False,
+                "stage": "error",
+                "progress": 0.0,
+                "message": "Failed",
+                "error": "Failed",
+            }
+
+    server.transcriber = ReloadableTranscriber()
+
+    response = client.post("/model/reload")
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "status": "reloading",
+        "message": "Model reload requested",
+    }
+    assert calls == [True]

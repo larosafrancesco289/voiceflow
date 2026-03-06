@@ -6,6 +6,11 @@ export interface LoadingProgress {
   message: string;
 }
 
+export interface WebSocketErrorInfo {
+  message: string;
+  affectsReadiness: boolean;
+}
+
 interface WebSocketMessage {
   type: 'partial' | 'final' | 'error' | 'ready' | 'loading';
   text?: string;
@@ -13,13 +18,14 @@ interface WebSocketMessage {
   stage?: string;
   progress?: number;
   message?: string;
+  affectsReadiness?: boolean;
 }
 
 interface UseWebSocketOptions {
   url: string;
   onPartial?: (text: string) => void;
   onFinal?: (text: string) => void;
-  onError?: (error: string) => void;
+  onError?: (error: WebSocketErrorInfo) => void;
   onLoading?: (progress: LoadingProgress) => void;
 }
 
@@ -123,7 +129,8 @@ export function useWebSocket({
                 progress: message.progress || 0,
                 message: message.message || 'Loading...',
               };
-              setLoadingProgress(progress);
+              setIsReady(progress.stage === 'ready');
+              setLoadingProgress(progress.stage === 'ready' ? null : progress);
               onLoadingRef.current?.(progress);
               break;
             }
@@ -134,7 +141,16 @@ export function useWebSocket({
               onFinalRef.current?.(message.text || '');
               break;
             case 'error':
-              if (message.error) onErrorRef.current?.(message.error);
+              if (message.affectsReadiness) {
+                setIsReady(false);
+                setLoadingProgress(null);
+              }
+              if (message.error) {
+                onErrorRef.current?.({
+                  message: message.error,
+                  affectsReadiness: message.affectsReadiness ?? false,
+                });
+              }
               break;
           }
         } catch {
@@ -145,7 +161,10 @@ export function useWebSocket({
       ws.onerror = (error) => {
         isConnectingRef.current = false;
         console.error('WebSocket error:', error);
-        onErrorRef.current?.('WebSocket connection error');
+        onErrorRef.current?.({
+          message: 'WebSocket connection error',
+          affectsReadiness: true,
+        });
       };
 
       ws.onclose = () => {

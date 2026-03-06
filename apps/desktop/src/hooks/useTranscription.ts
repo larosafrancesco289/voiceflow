@@ -4,15 +4,26 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useAppStore } from '../stores/appStore';
 import { useAudioCapture } from './useAudioCapture';
-import { useWebSocket, LoadingProgress } from './useWebSocket';
-
-const WS_URL = 'ws://127.0.0.1:8765/ws';
+import {
+  useWebSocket,
+  LoadingProgress,
+  WebSocketErrorInfo,
+} from './useWebSocket';
+import {
+  ensureServerRunning,
+  getErrorMessage,
+  SERVER_WS_URL,
+} from '../utils/serverControl';
 
 interface UseTranscriptionOptions {
   autoStart?: boolean;
+  listenForGlobalShortcuts?: boolean;
 }
 
-export function useTranscription({ autoStart = true }: UseTranscriptionOptions = {}) {
+export function useTranscription({
+  autoStart = true,
+  listenForGlobalShortcuts = true,
+}: UseTranscriptionOptions = {}) {
   const recordingState = useAppStore((state) => state.recordingState);
   const setRecordingState = useAppStore((state) => state.setRecordingState);
   const setCurrentTranscription = useAppStore((state) => state.setCurrentTranscription);
@@ -35,12 +46,11 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
   );
   const autoStartTriggeredRef = useRef(false);
 
-  const ensureServerRunning = useCallback(async () => {
-    if (!isTauri()) return;
+  const ensureVoiceServerRunning = useCallback(async () => {
     try {
-      await invoke('ensure_server_running');
+      await ensureServerRunning();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to start voice server';
+      const message = getErrorMessage(error, 'Failed to start voice server');
       console.error('[Transcription] Failed to ensure server is running:', error);
       setModelLoadingState({
         isLoading: true,
@@ -56,7 +66,9 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     async (text: string) => {
       if (!text.trim()) {
         reset();
-        void invoke('hide_bubble');
+        if (isTauri()) {
+          void invoke('hide_bubble');
+        }
         return;
       }
 
@@ -64,7 +76,7 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
       setRecordingState('complete');
       addToHistory(text);
 
-      if (autoPasteEnabled) {
+      if (autoPasteEnabled && isTauri()) {
         try {
           await writeText(text);
           await invoke('hide_bubble');
@@ -78,7 +90,9 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
 
       setTimeout(() => {
         reset();
-        void invoke('hide_bubble');
+        if (isTauri()) {
+          void invoke('hide_bubble');
+        }
       }, 1000);
     },
     [setCurrentTranscription, setRecordingState, addToHistory, autoPasteEnabled, reset]
@@ -94,20 +108,29 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     isReady,
     loadingProgress,
   } = useWebSocket({
-    url: WS_URL,
+    url: SERVER_WS_URL,
     onPartial: setPartialTranscription,
     onFinal: handleFinalTranscription,
-    onError: (error) => {
-      console.error('[Transcription] WebSocket error:', error);
-      setRecordingState('idle');
-      setModelLoadingState({
-        isLoading: true,
-        stage: 'error',
-        progress: 0,
-        message: error,
-      });
-      if (error === 'WebSocket connection error') {
-        void ensureServerRunning();
+    onError: ({ message, affectsReadiness }: WebSocketErrorInfo) => {
+      console.error('[Transcription] WebSocket error:', message);
+
+      if (affectsReadiness) {
+        setRecordingState('idle');
+        setModelLoadingState({
+          isLoading: true,
+          stage: 'error',
+          progress: 0,
+          message,
+        });
+      } else {
+        reset();
+        if (isTauri()) {
+          void invoke('hide_bubble');
+        }
+      }
+
+      if (message === 'WebSocket connection error') {
+        void ensureVoiceServerRunning();
       }
     },
     onLoading: handleLoadingProgress,
@@ -137,7 +160,9 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     if (!isConnected || !isReady) return;
 
     try {
-      await invoke('show_bubble');
+      if (isTauri()) {
+        await invoke('show_bubble');
+      }
       setRecordingState('recording');
       setPartialTranscription('');
       setCurrentTranscription('');
@@ -174,10 +199,14 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
 
   const startServer = useCallback(() => {
     void (async () => {
-      await ensureServerRunning();
-      connect();
+      try {
+        await ensureVoiceServerRunning();
+        connect();
+      } catch {
+        // Store state is already updated in ensureVoiceServerRunning.
+      }
     })();
-  }, [ensureServerRunning, connect]);
+  }, [ensureVoiceServerRunning, connect]);
 
   useEffect(() => {
     let disposed = false;
@@ -187,6 +216,12 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
     if (autoStart && !autoStartTriggeredRef.current) {
       autoStartTriggeredRef.current = true;
       startServer();
+    }
+
+    if (!listenForGlobalShortcuts || !isTauri()) {
+      return () => {
+        disconnect();
+      };
     }
 
     void listen('recording-start', () => {
@@ -215,7 +250,7 @@ export function useTranscription({ autoStart = true }: UseTranscriptionOptions =
       unlistenStop?.();
       disconnect();
     };
-  }, [autoStart, disconnect, startServer]);
+  }, [autoStart, disconnect, listenForGlobalShortcuts, startServer]);
 
   return {
     recordingState,

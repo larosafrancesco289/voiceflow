@@ -8,6 +8,8 @@ interface ToggleProps {
 export function Toggle({ enabled, onChange }: ToggleProps) {
   return (
     <button
+      type="button"
+      aria-pressed={enabled}
       onClick={() => onChange(!enabled)}
       className="relative w-10 h-6 rounded-full transition-all duration-200"
       style={{ background: enabled ? '#22c55e' : 'rgba(255, 255, 255, 0.1)' }}
